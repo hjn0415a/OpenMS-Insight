@@ -430,6 +430,8 @@ plot(state_manager=state_manager, height=400)
 
 ## Development
 
+For a comprehensive guide to the internal architecture, conventions, and pitfalls, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ### Building the Vue Component
 
 ```bash
