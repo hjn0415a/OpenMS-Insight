@@ -130,9 +130,11 @@ export const useStreamlitDataStore = defineStore('streamlit-data', {
         const data = newData.args as StreamlitData
         Object.entries(data).forEach(([key, value]) => {
           if (value instanceof ArrowTable) {
-            // Use column-based parsing for plotData (more efficient for plotting)
-            // Use row-based parsing for tableData (needed for Tabulator)
-            if (key === 'plotData') {
+            // Use column-based parsing for plot data (LinePlot's `plotData`,
+            // MirrorPlot's `plotDataTop`/`plotDataBottom`) — more efficient for plotting.
+            // Use row-based parsing for tableData (needed for Tabulator) and
+            // other ArrowTable payloads.
+            if (key.startsWith('plotData')) {
               const parsed = this.parseArrowTableToColumns(value)
               console.log(`[StreamlitDataStore] Parsed ${key} to columns:`, {
                 columns: Object.keys(parsed),
