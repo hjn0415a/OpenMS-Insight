@@ -137,15 +137,15 @@ export default defineComponent({
         interactivityValues,
       }
     },
-    render() {
+    async render() {
       const top = this.topData
       const bottom = this.bottomData
       if (!top && !bottom) return
 
       const topY = top?.y ?? []
       const bottomY = bottom?.y ?? []
-      const topMax = topY.length > 0 ? Math.max(...topY) : 0
-      const bottomMax = bottomY.length > 0 ? Math.max(...bottomY) : 0
+      const topMax = topY.reduce((m, v) => (v > m ? v : m), 0)
+      const bottomMax = bottomY.reduce((m, v) => (v > m ? v : m), 0)
       const yMax = Math.max(topMax, bottomMax, 1.0) // 1.0 fallback for empty figure
 
       // Build per-peak colors (Task 13 will refine these on selection changes)
@@ -256,7 +256,7 @@ export default defineComponent({
       const element = document.getElementById(this.id)
       if (!element) return
 
-      void Plotly.newPlot(element, traces, layout, { responsive: true })
+      await Plotly.newPlot(element, traces, layout, { responsive: true })
       this.isInitialized = true
     },
 
