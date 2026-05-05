@@ -6,7 +6,6 @@ import polars as pl
 
 from ..core.base import BaseComponent
 from ..core.registry import register_component
-from ..preprocessing.filtering import filter_and_collect_cached
 
 
 @register_component("mirrorplot")
@@ -68,8 +67,58 @@ class MirrorPlot(BaseComponent):
         config: Optional[Dict[str, Any]] = None,
         **kwargs,
     ):
-        # Subprocess recreation passes the union dicts back; discard them
-        # because we recompute the union from the per-side dicts below.
+        """
+        Initialize the MirrorPlot component.
+
+        Args:
+            cache_id: Unique identifier for this component's cache (MANDATORY).
+                Creates a folder {cache_path}/{cache_id}/ for cached data.
+            data: Polars LazyFrame with plot data. Optional if cache exists.
+            data_path: Path to parquet file (preferred for large datasets).
+            filters_top: Mapping of identifier names to column names for filtering
+                the top spectrum.
+                Example: {'spectrum_top': 'scan_id'}
+                When 'spectrum_top' selection exists, the top half shows only data
+                where scan_id equals the selected value.
+            filter_defaults_top: Default values for filters_top when state is None.
+                Example: {'spectrum_top': -1}
+                When 'spectrum_top' selection is None, filter uses -1 instead.
+            filters_bottom: Mapping of identifier names to column names for
+                filtering the bottom spectrum.
+                Example: {'spectrum_bottom': 'scan_id'}
+            filter_defaults_bottom: Default values for filters_bottom when state
+                is None.
+            interactivity: Mapping of identifier names to column names for clicks.
+                Shared between both halves — clicking a peak in either half sets
+                the same selection identifier.
+                Example: {'selected_peak': 'peak_id'}
+            cache_path: Base path for cache storage. Default "." (current dir).
+            regenerate_cache: If True, regenerate cache even if valid cache exists.
+            x_column: Column name for x-axis values (shared for both halves).
+            y_column: Column name for y-axis values (positive for both halves;
+                Vue flips the bottom half to negative at render time).
+            highlight_column: Optional column name containing boolean/int
+                              indicating which points to highlight (shared).
+            annotation_column: Optional column name containing text annotations
+                               to display on highlighted points (shared).
+            title: Overall plot title (superseded by title_top/title_bottom if set).
+            title_top: Label shown above the top spectrum.
+            title_bottom: Label shown below the bottom spectrum (above the x-axis).
+            x_label: X-axis label (defaults to x_column).
+            y_label: Y-axis label (defaults to y_column).
+            styling: Style configuration dict with keys:
+                - highlightColor: Color for highlighted points (default: '#E4572E')
+                - selectedColor: Color for clicked/selected peak (default: '#F3A712')
+                - unhighlightedColor: Color for normal points (default: 'lightblue')
+                - annotationBackground: Background color for annotations
+            config: Additional Plotly config options.
+            **kwargs: Additional configuration options.
+        """
+        # Subprocess preprocessing re-instantiates the component via
+        # MirrorPlot(filters=union, filter_defaults=union, **kwargs) because
+        # BaseComponent passes them as explicit kwargs. Without popping them,
+        # super().__init__(filters=...) would receive `filters` twice and raise
+        # TypeError.
         kwargs.pop("filters", None)
         kwargs.pop("filter_defaults", None)
 
@@ -135,6 +184,11 @@ class MirrorPlot(BaseComponent):
         """Validate per-side filters and shared schema columns."""
         if self._raw_data is None:
             return  # Skip validation when reconstructing from cache
+
+        # Note: this deliberately does NOT call super()._validate_mappings(). We re-
+        # implement the filter/interactivity column checks here to produce per-side
+        # error messages naming filters_top/filters_bottom. If BaseComponent grows new
+        # checks, mirror them here.
 
         # Creation-mode: both sides required and disjoint
         if not self._filters_top:
