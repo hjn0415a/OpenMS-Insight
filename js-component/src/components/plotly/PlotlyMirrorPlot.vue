@@ -138,8 +138,166 @@ export default defineComponent({
       }
     },
     render() {
-      // Implemented in Task 12
+      const top = this.topData
+      const bottom = this.bottomData
+      if (!top && !bottom) return
+
+      const topY = top?.y ?? []
+      const bottomY = bottom?.y ?? []
+      const topMax = topY.length > 0 ? Math.max(...topY) : 0
+      const bottomMax = bottomY.length > 0 ? Math.max(...bottomY) : 0
+      const yMax = Math.max(topMax, bottomMax, 1.0) // 1.0 fallback for empty figure
+
+      // Build per-peak colors (Task 13 will refine these on selection changes)
+      const topColors = this.colorsForSide(top, this.styling.topColor)
+      const bottomColors = this.colorsForSide(bottom, this.styling.bottomColor)
+
+      // Build "stick" lines as Plotly shapes (one per peak)
+      // Top half y > 0, bottom half y < 0 (we negate bottom values here)
+      const shapes: Partial<Plotly.Shape>[] = []
+      if (top) {
+        for (let i = 0; i < top.x.length; i++) {
+          shapes.push({
+            type: 'line',
+            x0: top.x[i],
+            x1: top.x[i],
+            y0: 0,
+            y1: top.y[i],
+            line: { color: topColors[i], width: 1.5 },
+          })
+        }
+      }
+      if (bottom) {
+        for (let i = 0; i < bottom.x.length; i++) {
+          shapes.push({
+            type: 'line',
+            x0: bottom.x[i],
+            x1: bottom.x[i],
+            y0: 0,
+            y1: -bottom.y[i], // FLIP HERE
+            line: { color: bottomColors[i], width: 1.5 },
+          })
+        }
+      }
+
+      // Marker traces give us click events (the shapes alone don't)
+      const traces: Partial<Plotly.PlotData>[] = [
+        {
+          x: top?.x ?? [],
+          y: top?.y ?? [],
+          mode: 'markers',
+          type: 'scattergl',
+          marker: { color: topColors, size: 4 },
+          name: this.args.titleTop || 'Top',
+          customdata: (top?.x.map((_, i) => ({ side: 'top', index: i })) ?? []) as any[],
+        },
+        {
+          x: bottom?.x ?? [],
+          y: (bottom?.y ?? []).map((v) => -v), // FLIP HERE
+          mode: 'markers',
+          type: 'scattergl',
+          marker: { color: bottomColors, size: 4 },
+          name: this.args.titleBottom || 'Bottom',
+          customdata: (bottom?.x.map((_, i) => ({ side: 'bottom', index: i })) ?? []) as any[],
+        },
+      ]
+
+      const tickValues = [-yMax, -yMax / 2, 0, yMax / 2, yMax]
+      const tickText = tickValues.map((v) => Math.abs(v).toFixed(0))
+
+      const annotations: Partial<Plotly.Annotations>[] = [
+        ...(this.args.titleTop
+          ? [
+              {
+                text: this.args.titleTop,
+                xref: 'paper' as const,
+                yref: 'paper' as const,
+                x: 0.02,
+                y: 0.98,
+                showarrow: false,
+                xanchor: 'left' as const,
+                yanchor: 'top' as const,
+              },
+            ]
+          : []),
+        ...(this.args.titleBottom
+          ? [
+              {
+                text: this.args.titleBottom,
+                xref: 'paper' as const,
+                yref: 'paper' as const,
+                x: 0.02,
+                y: 0.02,
+                showarrow: false,
+                xanchor: 'left' as const,
+                yanchor: 'bottom' as const,
+              },
+            ]
+          : []),
+      ]
+
+      const layout: Partial<Plotly.Layout> = {
+        title: this.args.title ? { text: this.args.title } : undefined,
+        xaxis: { title: this.args.xLabel ? { text: this.args.xLabel } : undefined },
+        yaxis: {
+          title: this.args.yLabel ? { text: this.args.yLabel } : undefined,
+          range: [-yMax * 1.1, yMax * 1.1],
+          tickvals: tickValues,
+          ticktext: tickText,
+          zeroline: true,
+          zerolinecolor: '#888',
+          zerolinewidth: 1,
+        },
+        shapes,
+        showlegend: false,
+        annotations,
+      }
+
+      const element = document.getElementById(this.id)
+      if (!element) return
+
+      void Plotly.newPlot(element, traces, layout, { responsive: true })
+      this.isInitialized = true
     },
+
+    colorsForSide(side: SideData | undefined, baseColor: string): string[] {
+      if (!side) return []
+      const colors: string[] = []
+      const interactivityCol = this.firstInteractivityColumn()
+      const selectionValue = interactivityCol ? this.currentSelectionValue() : undefined
+
+      for (let i = 0; i < side.x.length; i++) {
+        let color = baseColor
+        if (side.highlight?.[i]) {
+          color = this.styling.highlightColor
+        }
+        if (
+          interactivityCol &&
+          side.interactivityValues?.[interactivityCol]?.[i] === selectionValue &&
+          selectionValue !== undefined
+        ) {
+          color = this.styling.selectedColor
+        }
+        colors.push(color)
+      }
+      return colors
+    },
+
+    firstInteractivityColumn(): string | undefined {
+      const map = this.args.interactivity
+      if (!map) return undefined
+      const keys = Object.keys(map)
+      return keys.length ? map[keys[0]] : undefined
+    },
+
+    currentSelectionValue(): unknown {
+      const map = this.args.interactivity
+      if (!map) return undefined
+      const firstIdentifier = Object.keys(map)[0]
+      if (!firstIdentifier) return undefined
+      return this.selectionStore.$state[firstIdentifier]
+    },
+
     recolor() {
       // Implemented in Task 13
     },
