@@ -167,3 +167,14 @@ class TestMirrorPlotPrepareVueData:
     ):
         comp = self._make(temp_cache_dir, sample_lineplot_data)
         assert "selected_peak" not in comp.get_state_dependencies()
+
+    def test_build_plot_config_accepts_two_args(
+        self, mock_streamlit, temp_cache_dir, sample_lineplot_data
+    ):
+        """Bridge calls _build_plot_config with 2 args; both halves get the same columns."""
+        comp = self._make(temp_cache_dir, sample_lineplot_data)
+        result = comp._build_plot_config("highlight_col_name", "annotation_col_name")
+        assert result["topHighlightColumn"] == "highlight_col_name"
+        assert result["bottomHighlightColumn"] == "highlight_col_name"
+        assert result["topAnnotationColumn"] == "annotation_col_name"
+        assert result["bottomAnnotationColumn"] == "annotation_col_name"

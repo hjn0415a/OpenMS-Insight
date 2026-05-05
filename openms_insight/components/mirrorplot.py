@@ -420,10 +420,10 @@ class MirrorPlot(BaseComponent):
             "plotDataBottom": df_bottom,
             "_hash": data_hash,
             "_plotConfig": self._build_plot_config(
-                top_highlight_col,
-                top_annotation_col,
-                bot_highlight_col,
-                bot_annotation_col,
+                top_highlight_col=top_highlight_col,
+                top_annotation_col=top_annotation_col,
+                bot_highlight_col=bot_highlight_col,
+                bot_annotation_col=bot_annotation_col,
             ),
         }
 
@@ -462,12 +462,27 @@ class MirrorPlot(BaseComponent):
 
     def _build_plot_config(
         self,
-        top_highlight_col: Optional[str],
-        top_annotation_col: Optional[str],
-        bot_highlight_col: Optional[str],
-        bot_annotation_col: Optional[str],
+        top_highlight_col: Optional[str] = None,
+        top_annotation_col: Optional[str] = None,
+        bot_highlight_col: Optional[str] = None,
+        bot_annotation_col: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Plot config sent alongside data — Vue uses it to map columns per side."""
+        """
+        Plot config sent alongside data — Vue uses it to map columns per side.
+
+        Called from two places:
+        - `_prepare_vue_data` and `_apply_fresh_annotations` (Task 7) pass all 4
+          args, allowing each side to have its own column names (e.g.
+          _dynamic_highlight when annotations are active on that side).
+        - `bridge.py` calls with 2 args (static highlight/annotation columns).
+          Both sides default to those static columns in that case.
+        """
+        # Bridge 2-arg form: bottom defaults to top (= static columns)
+        if bot_highlight_col is None:
+            bot_highlight_col = top_highlight_col
+        if bot_annotation_col is None:
+            bot_annotation_col = top_annotation_col
+
         return {
             "xColumn": self._x_column,
             "yColumn": self._y_column,
