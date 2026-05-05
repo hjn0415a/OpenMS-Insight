@@ -8,12 +8,10 @@ import Plotly from 'plotly.js-dist-min'
 import { type Theme } from 'streamlit-component-lib'
 import { useStreamlitDataStore } from '@/stores/streamlit-data'
 import { useSelectionStore } from '@/stores/selection'
-import type { MirrorPlotComponentArgs, MirrorPlotStyling } from '@/types/component'
+import type { MirrorPlotComponentArgs } from '@/types/component'
 
 // Default styling configuration
-const DEFAULT_STYLING: Required<
-  Pick<MirrorPlotStyling, 'topColor' | 'bottomColor' | 'highlightColor' | 'selectedColor'>
-> = {
+const DEFAULT_STYLING = {
   topColor: 'lightblue',
   bottomColor: 'lightcoral',
   highlightColor: '#E4572E',
@@ -58,7 +56,7 @@ export default defineComponent({
       return this.streamlitDataStore.theme
     },
     styling() {
-      return { ...DEFAULT_STYLING, ...(this.args.styling ?? {}) }
+      return { ...DEFAULT_STYLING, ...this.args.styling }
     },
     cssCustomProperties(): Record<string, string> {
       return {}
@@ -95,9 +93,12 @@ export default defineComponent({
       },
       deep: true,
     },
-    'selectionStore.counter'() {
-      // Re-color only — no full redraw (Task 13)
-      this.recolor()
+    'selectionStore.$state': {
+      handler() {
+        // Re-color only — no full redraw (Task 13)
+        this.recolor()
+      },
+      deep: true,
     },
   },
   mounted() {
