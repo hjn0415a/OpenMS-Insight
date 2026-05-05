@@ -26,6 +26,25 @@ interface SideData {
   interactivityValues?: Record<string, unknown[]>
 }
 
+interface AnnotatedPeak {
+  x: number
+  y: number
+  label: string
+  index: number
+}
+
+interface AnnotationBox {
+  x: number
+  y: number
+  width: number
+  height: number
+  label: string
+  visible: boolean
+  inVisibleRange: boolean
+  index: number
+  peakY: number
+}
+
 export default defineComponent({
   name: 'PlotlyMirrorPlot',
   props: {
@@ -46,6 +65,7 @@ export default defineComponent({
   data() {
     return {
       isInitialized: false as boolean,
+      textMeasureCanvas: null as HTMLCanvasElement | null,
     }
   },
   computed: {
@@ -78,6 +98,56 @@ export default defineComponent({
         'bottomHighlightColumn',
         'bottomAnnotationColumn',
       )
+    },
+    /** Maximum positive y value across both sides (data values are positive). */
+    yMaxData(): number {
+      const topY = this.topData?.y ?? []
+      const bottomY = this.bottomData?.y ?? []
+      const topMax = topY.reduce((m, v) => (v > m ? v : m), 0)
+      const bottomMax = bottomY.reduce((m, v) => (v > m ? v : m), 0)
+      return Math.max(topMax, bottomMax, 1.0)
+    },
+    /** True if any side has an annotation column configured. */
+    hasAnnotations(): boolean {
+      const top = (this.plotConfig?.topAnnotationColumn as string | null | undefined) ?? this.args.annotationColumn
+      const bottom = (this.plotConfig?.bottomAnnotationColumn as string | null | undefined) ?? this.args.annotationColumn
+      return !!(top || bottom)
+    },
+    /** Half-height of the y-axis range; expanded when labels need vertical room. */
+    yRangeMax(): number {
+      return this.yMaxData * (this.hasAnnotations ? 1.8 : 1.1)
+    },
+    /** X range covering both sides, with 2% padding (used for label fit calculations). */
+    xRange(): number[] {
+      const xs: number[] = []
+      if (this.topData) xs.push(...this.topData.x)
+      if (this.bottomData) xs.push(...this.bottomData.x)
+      if (xs.length === 0) return [0, 1]
+      const minX = Math.min(...xs)
+      const maxX = Math.max(...xs)
+      const padding = (maxX - minX) * 0.02
+      return [minX - padding, maxX + padding]
+    },
+    /** Plot DOM width for pixel-to-data conversion. */
+    actualPlotWidth(): number {
+      const element = document.getElementById(this.id)
+      if (element) {
+        const rect = element.getBoundingClientRect()
+        if (rect.width > 0) return rect.width
+      }
+      return 800
+    },
+    annotatedPeaksTop(): AnnotatedPeak[] {
+      return this.collectAnnotatedPeaks(this.topData)
+    },
+    annotatedPeaksBottom(): AnnotatedPeak[] {
+      return this.collectAnnotatedPeaks(this.bottomData)
+    },
+    annotationBoxDataTop(): AnnotationBox[] {
+      return this.computeAnnotationBoxes(this.annotatedPeaksTop)
+    },
+    annotationBoxDataBottom(): AnnotationBox[] {
+      return this.computeAnnotationBoxes(this.annotatedPeaksBottom)
     },
   },
   watch: {
@@ -137,27 +207,179 @@ export default defineComponent({
         interactivityValues,
       }
     },
+
+    collectAnnotatedPeaks(side: SideData | undefined): AnnotatedPeak[] {
+      if (!side || !side.annotations) return []
+      const { x, y, annotations, highlight } = side
+      const peaks: AnnotatedPeak[] = []
+      for (let i = 0; i < annotations.length; i++) {
+        const label = annotations[i]
+        if (!label || label.length === 0) continue
+        if (highlight && !highlight[i]) continue
+        peaks.push({ x: x[i], y: y[i], label, index: i })
+      }
+      return peaks
+    },
+
+    /**
+     * Greedy intensity-based overlap resolution: sort by peak intensity
+     * (highest first), commit boxes that don't collide with already-committed
+     * neighbors. Mirrors PlotlyLineplot's algorithm.
+     */
+    computeAnnotationBoxes(peaks: AnnotatedPeak[]): AnnotationBox[] {
+      if (peaks.length === 0) return []
+      const xRange = this.xRange
+      if (xRange[1] <= xRange[0]) return []
+
+      const yMax = this.yMaxData
+      const ypos_low = yMax * 1.18
+      const ypos_high = yMax * 1.32
+      const boxHeight = ypos_high - ypos_low
+      const textPaddingPx = 16
+
+      const boxes: AnnotationBox[] = peaks.map((peak) => {
+        const inVisibleRange = peak.x >= xRange[0] && peak.x <= xRange[1]
+        const textWidthPx = this.measureTextWidth(peak.label)
+        const widthDataUnits = this.pixelWidthToDataUnits(textWidthPx + textPaddingPx)
+        return {
+          x: peak.x,
+          y: (ypos_low + ypos_high) / 2,
+          width: widthDataUnits,
+          height: boxHeight,
+          label: peak.label,
+          visible: false,
+          inVisibleRange,
+          index: peak.index,
+          peakY: peak.y,
+        }
+      })
+
+      const candidates = boxes
+        .filter((b) => b.inVisibleRange)
+        .sort((a, b) => {
+          if (b.peakY !== a.peakY) return b.peakY - a.peakY
+          return a.x - b.x
+        })
+
+      const gapDataUnits = this.pixelWidthToDataUnits(4)
+      const committed: AnnotationBox[] = []
+      for (const box of candidates) {
+        const left = box.x - box.width / 2 - gapDataUnits
+        const right = box.x + box.width / 2 + gapDataUnits
+        let collides = false
+        for (const c of committed) {
+          const cLeft = c.x - c.width / 2
+          const cRight = c.x + c.width / 2
+          if (!(right < cLeft || left > cRight)) {
+            collides = true
+            break
+          }
+        }
+        if (!collides) {
+          box.visible = true
+          committed.push(box)
+        }
+      }
+      return boxes
+    },
+
+    /**
+     * Build label background rectangles for one side. Bottom side gets y-flipped
+     * (negated) since the plot mirrors data below the x axis.
+     */
+    buildAnnotationShapes(
+      boxes: AnnotationBox[],
+      side: 'top' | 'bottom',
+    ): Partial<Plotly.Shape>[] {
+      const yMax = this.yMaxData
+      const ypos_low = yMax * 1.18
+      const ypos_high = yMax * 1.32
+      const interactivityCol = this.firstInteractivityColumn()
+      const selectionValue = interactivityCol ? this.currentSelectionValue() : undefined
+      const sourceData = side === 'top' ? this.topData : this.bottomData
+
+      const shapes: Partial<Plotly.Shape>[] = []
+      for (const box of boxes) {
+        if (!box.visible) continue
+        let isSelected = false
+        if (interactivityCol && sourceData?.interactivityValues?.[interactivityCol]) {
+          const peakValue = sourceData.interactivityValues[interactivityCol][box.index]
+          isSelected = peakValue === selectionValue && selectionValue !== undefined
+        }
+        const color = isSelected ? this.styling.selectedColor : this.styling.highlightColor
+        const y0 = side === 'top' ? ypos_low : -ypos_high
+        const y1 = side === 'top' ? ypos_high : -ypos_low
+        shapes.push({
+          type: 'rect',
+          x0: box.x - box.width / 2,
+          y0,
+          x1: box.x + box.width / 2,
+          y1,
+          fillcolor: color,
+          line: { width: 0 },
+        })
+      }
+      return shapes
+    },
+
+    /**
+     * Build Plotly text annotations for one side. Bottom side y is negated.
+     */
+    buildPeakAnnotations(
+      boxes: AnnotationBox[],
+      side: 'top' | 'bottom',
+    ): Partial<Plotly.Annotations>[] {
+      const yMax = this.yMaxData
+      const ypos = yMax * 1.25
+      const annotations: Partial<Plotly.Annotations>[] = []
+      for (const box of boxes) {
+        if (!box.visible) continue
+        annotations.push({
+          x: box.x,
+          y: side === 'top' ? ypos : -ypos,
+          xref: 'x',
+          yref: 'y',
+          text: box.label,
+          showarrow: false,
+          font: { size: 14, color: 'white' },
+        })
+      }
+      return annotations
+    },
+
+    measureTextWidth(text: string): number {
+      if (!this.textMeasureCanvas) {
+        this.textMeasureCanvas = document.createElement('canvas')
+      }
+      const ctx = this.textMeasureCanvas.getContext('2d')
+      if (!ctx) return text.length * 8
+      ctx.font = '14px Arial'
+      return ctx.measureText(text).width
+    },
+
+    pixelWidthToDataUnits(pixelWidth: number): number {
+      const xRange = this.xRange
+      const rangeWidth = xRange[1] - xRange[0]
+      const plotWidth = this.actualPlotWidth
+      if (plotWidth <= 0 || rangeWidth <= 0) return 0
+      return pixelWidth / (plotWidth / rangeWidth)
+    },
     async render() {
       const top = this.topData
       const bottom = this.bottomData
       if (!top && !bottom) return
 
-      const topY = top?.y ?? []
-      const bottomY = bottom?.y ?? []
-      const topMax = topY.reduce((m, v) => (v > m ? v : m), 0)
-      const bottomMax = bottomY.reduce((m, v) => (v > m ? v : m), 0)
-      const yMax = Math.max(topMax, bottomMax, 1.0) // 1.0 fallback for empty figure
+      const yMax = this.yMaxData
+      const yRangeMax = this.yRangeMax
 
-      // Build per-peak colors (Task 13 will refine these on selection changes)
       const topColors = this.colorsForSide(top, this.styling.topColor)
       const bottomColors = this.colorsForSide(bottom, this.styling.bottomColor)
 
-      // Build "stick" lines as Plotly shapes (one per peak)
-      // Top half y > 0, bottom half y < 0 (we negate bottom values here)
-      const shapes: Partial<Plotly.Shape>[] = []
+      // Stick lines (one per peak); bottom side y is negated.
+      const stickShapes: Partial<Plotly.Shape>[] = []
       if (top) {
         for (let i = 0; i < top.x.length; i++) {
-          shapes.push({
+          stickShapes.push({
             type: 'line',
             x0: top.x[i],
             x1: top.x[i],
@@ -169,16 +391,22 @@ export default defineComponent({
       }
       if (bottom) {
         for (let i = 0; i < bottom.x.length; i++) {
-          shapes.push({
+          stickShapes.push({
             type: 'line',
             x0: bottom.x[i],
             x1: bottom.x[i],
             y0: 0,
-            y1: -bottom.y[i], // FLIP HERE
+            y1: -bottom.y[i],
             line: { color: bottomColors[i], width: 1.5 },
           })
         }
       }
+
+      const labelShapes = [
+        ...this.buildAnnotationShapes(this.annotationBoxDataTop, 'top'),
+        ...this.buildAnnotationShapes(this.annotationBoxDataBottom, 'bottom'),
+      ]
+      const shapes = [...stickShapes, ...labelShapes]
 
       // Marker traces give us click events (the shapes alone don't)
       const traces: Partial<Plotly.PlotData>[] = [
@@ -193,7 +421,7 @@ export default defineComponent({
         },
         {
           x: bottom?.x ?? [],
-          y: (bottom?.y ?? []).map((v) => -v), // FLIP HERE
+          y: (bottom?.y ?? []).map((v) => -v),
           mode: 'markers',
           type: 'scattergl',
           marker: { color: bottomColors, size: 4 },
@@ -205,7 +433,7 @@ export default defineComponent({
       const tickValues = [-yMax, -yMax / 2, 0, yMax / 2, yMax]
       const tickText = tickValues.map((v) => Math.abs(v).toFixed(0))
 
-      const annotations: Partial<Plotly.Annotations>[] = [
+      const titleAnnotations: Partial<Plotly.Annotations>[] = [
         ...(this.args.titleTop
           ? [
               {
@@ -236,12 +464,21 @@ export default defineComponent({
           : []),
       ]
 
+      const annotations: Partial<Plotly.Annotations>[] = [
+        ...titleAnnotations,
+        ...this.buildPeakAnnotations(this.annotationBoxDataTop, 'top'),
+        ...this.buildPeakAnnotations(this.annotationBoxDataBottom, 'bottom'),
+      ]
+
       const layout: Partial<Plotly.Layout> = {
         title: this.args.title ? { text: this.args.title } : undefined,
-        xaxis: { title: this.args.xLabel ? { text: this.args.xLabel } : undefined },
+        xaxis: {
+          title: this.args.xLabel ? { text: this.args.xLabel } : undefined,
+          range: this.xRange,
+        },
         yaxis: {
           title: this.args.yLabel ? { text: this.args.yLabel } : undefined,
-          range: [-yMax * 1.1, yMax * 1.1],
+          range: [-yRangeMax, yRangeMax],
           tickvals: tickValues,
           ticktext: tickText,
           zeroline: true,
@@ -331,11 +568,10 @@ export default defineComponent({
       void Plotly.restyle(this.id, { 'marker.color': [topColors] }, [0])
       void Plotly.restyle(this.id, { 'marker.color': [bottomColors] }, [1])
 
-      // Rebuild shapes with updated colors (no axis range recomputation needed)
-      const shapes: Partial<Plotly.Shape>[] = []
+      const stickShapes: Partial<Plotly.Shape>[] = []
       if (top) {
         for (let i = 0; i < top.x.length; i++) {
-          shapes.push({
+          stickShapes.push({
             type: 'line',
             x0: top.x[i],
             x1: top.x[i],
@@ -347,7 +583,7 @@ export default defineComponent({
       }
       if (bottom) {
         for (let i = 0; i < bottom.x.length; i++) {
-          shapes.push({
+          stickShapes.push({
             type: 'line',
             x0: bottom.x[i],
             x1: bottom.x[i],
@@ -357,7 +593,52 @@ export default defineComponent({
           })
         }
       }
-      void Plotly.relayout(this.id, { shapes })
+
+      // Rebuild label backgrounds + text — selection state may have changed
+      // which annotation rect should be shown in selectedColor.
+      const labelShapes = [
+        ...this.buildAnnotationShapes(this.annotationBoxDataTop, 'top'),
+        ...this.buildAnnotationShapes(this.annotationBoxDataBottom, 'bottom'),
+      ]
+      const shapes = [...stickShapes, ...labelShapes]
+
+      const titleAnnotations: Partial<Plotly.Annotations>[] = [
+        ...(this.args.titleTop
+          ? [
+              {
+                text: this.args.titleTop,
+                xref: 'paper' as const,
+                yref: 'paper' as const,
+                x: 0.02,
+                y: 0.98,
+                showarrow: false,
+                xanchor: 'left' as const,
+                yanchor: 'top' as const,
+              },
+            ]
+          : []),
+        ...(this.args.titleBottom
+          ? [
+              {
+                text: this.args.titleBottom,
+                xref: 'paper' as const,
+                yref: 'paper' as const,
+                x: 0.02,
+                y: 0.02,
+                showarrow: false,
+                xanchor: 'left' as const,
+                yanchor: 'bottom' as const,
+              },
+            ]
+          : []),
+      ]
+      const annotations: Partial<Plotly.Annotations>[] = [
+        ...titleAnnotations,
+        ...this.buildPeakAnnotations(this.annotationBoxDataTop, 'top'),
+        ...this.buildPeakAnnotations(this.annotationBoxDataBottom, 'bottom'),
+      ]
+
+      void Plotly.relayout(this.id, { shapes, annotations })
     },
   },
 })
