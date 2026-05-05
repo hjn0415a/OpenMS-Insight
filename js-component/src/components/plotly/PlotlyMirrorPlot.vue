@@ -10,12 +10,11 @@ import { useStreamlitDataStore } from '@/stores/streamlit-data'
 import { useSelectionStore } from '@/stores/selection'
 import type { MirrorPlotComponentArgs } from '@/types/component'
 
-// Default styling configuration
+// Default styling configuration (matches PlotlyLineplot for visual consistency)
 const DEFAULT_STYLING = {
-  topColor: 'lightblue',
-  bottomColor: 'lightcoral',
   highlightColor: '#E4572E',
   selectedColor: '#F3A712',
+  unhighlightedColor: 'lightblue',
 }
 
 interface SideData {
@@ -107,15 +106,9 @@ export default defineComponent({
       const bottomMax = bottomY.reduce((m, v) => (v > m ? v : m), 0)
       return Math.max(topMax, bottomMax, 1.0)
     },
-    /** True if any side has an annotation column configured. */
-    hasAnnotations(): boolean {
-      const top = (this.plotConfig?.topAnnotationColumn as string | null | undefined) ?? this.args.annotationColumn
-      const bottom = (this.plotConfig?.bottomAnnotationColumn as string | null | undefined) ?? this.args.annotationColumn
-      return !!(top || bottom)
-    },
-    /** Half-height of the y-axis range; expanded when labels need vertical room. */
+    /** Half-height of the y-axis range. Matches PlotlyLineplot's 1.8× expansion. */
     yRangeMax(): number {
-      return this.yMaxData * (this.hasAnnotations ? 1.8 : 1.1)
+      return this.yMaxData * 1.8
     },
     /** X range covering both sides, with 2% padding (used for label fit calculations). */
     xRange(): number[] {
@@ -372,35 +365,13 @@ export default defineComponent({
       const yMax = this.yMaxData
       const yRangeMax = this.yRangeMax
 
-      const topColors = this.colorsForSide(top, this.styling.topColor)
-      const bottomColors = this.colorsForSide(bottom, this.styling.bottomColor)
+      const topColors = this.colorsForSide(top)
+      const bottomColors = this.colorsForSide(bottom)
 
-      // Stick lines (one per peak); bottom side y is negated.
-      const stickShapes: Partial<Plotly.Shape>[] = []
-      if (top) {
-        for (let i = 0; i < top.x.length; i++) {
-          stickShapes.push({
-            type: 'line',
-            x0: top.x[i],
-            x1: top.x[i],
-            y0: 0,
-            y1: top.y[i],
-            line: { color: topColors[i], width: 1.5 },
-          })
-        }
-      }
-      if (bottom) {
-        for (let i = 0; i < bottom.x.length; i++) {
-          stickShapes.push({
-            type: 'line',
-            x0: bottom.x[i],
-            x1: bottom.x[i],
-            y0: 0,
-            y1: -bottom.y[i],
-            line: { color: bottomColors[i], width: 1.5 },
-          })
-        }
-      }
+      const stickShapes: Partial<Plotly.Shape>[] = [
+        ...this.buildStickShapes(top, topColors, 'top'),
+        ...this.buildStickShapes(bottom, bottomColors, 'bottom'),
+      ]
 
       const labelShapes = [
         ...this.buildAnnotationShapes(this.annotationBoxDataTop, 'top'),
@@ -471,22 +442,44 @@ export default defineComponent({
       ]
 
       const layout: Partial<Plotly.Layout> = {
-        title: this.args.title ? { text: this.args.title } : undefined,
+        title: this.args.title ? { text: `<b>${this.args.title}</b>` } : undefined,
+        showlegend: false,
+        height: this.args.height || 400,
         xaxis: {
           title: this.args.xLabel ? { text: this.args.xLabel } : undefined,
+          showgrid: false,
+          showline: true,
+          linecolor: 'grey',
+          linewidth: 1,
           range: this.xRange,
         },
         yaxis: {
           title: this.args.yLabel ? { text: this.args.yLabel } : undefined,
+          showgrid: true,
+          gridcolor: this.theme?.secondaryBackgroundColor || '#f0f0f0',
+          showline: true,
+          linecolor: 'grey',
+          linewidth: 1,
           range: [-yRangeMax, yRangeMax],
           tickvals: tickValues,
           ticktext: tickText,
           zeroline: true,
-          zerolinecolor: '#888',
+          zerolinecolor: 'grey',
           zerolinewidth: 1,
         },
+        paper_bgcolor: this.theme?.backgroundColor || 'white',
+        plot_bgcolor: this.theme?.backgroundColor || 'white',
+        font: {
+          color: this.theme?.textColor || 'black',
+          family: this.theme?.font || 'Arial',
+        },
+        margin: {
+          l: 60,
+          r: 20,
+          t: this.args.title ? 50 : 20,
+          b: 50,
+        },
         shapes,
-        showlegend: false,
         annotations,
       }
 
@@ -518,14 +511,14 @@ export default defineComponent({
       })
     },
 
-    colorsForSide(side: SideData | undefined, baseColor: string): string[] {
+    colorsForSide(side: SideData | undefined): string[] {
       if (!side) return []
       const colors: string[] = []
       const interactivityCol = this.firstInteractivityColumn()
       const selectionValue = interactivityCol ? this.currentSelectionValue() : undefined
 
       for (let i = 0; i < side.x.length; i++) {
-        let color = baseColor
+        let color = this.styling.unhighlightedColor
         if (side.highlight?.[i]) {
           color = this.styling.highlightColor
         }
@@ -539,6 +532,32 @@ export default defineComponent({
         colors.push(color)
       }
       return colors
+    },
+
+    /**
+     * Build stick line shapes for one side. Bottom side y is negated to mirror.
+     * Selected peaks get width 3 (matches PlotlyLineplot); others use Plotly default.
+     */
+    buildStickShapes(
+      side: SideData | undefined,
+      colors: string[],
+      sideKey: 'top' | 'bottom',
+    ): Partial<Plotly.Shape>[] {
+      if (!side) return []
+      const sign = sideKey === 'top' ? 1 : -1
+      const shapes: Partial<Plotly.Shape>[] = []
+      for (let i = 0; i < side.x.length; i++) {
+        const isSelected = colors[i] === this.styling.selectedColor
+        shapes.push({
+          type: 'line',
+          x0: side.x[i],
+          x1: side.x[i],
+          y0: 0,
+          y1: sign * side.y[i],
+          line: { color: colors[i], width: isSelected ? 3 : 1.5 },
+        })
+      }
+      return shapes
     },
 
     firstInteractivityColumn(): string | undefined {
@@ -561,38 +580,17 @@ export default defineComponent({
       const top = this.topData
       const bottom = this.bottomData
 
-      const topColors = this.colorsForSide(top, this.styling.topColor)
-      const bottomColors = this.colorsForSide(bottom, this.styling.bottomColor)
+      const topColors = this.colorsForSide(top)
+      const bottomColors = this.colorsForSide(bottom)
 
       // Update marker colors on existing traces
       void Plotly.restyle(this.id, { 'marker.color': [topColors] }, [0])
       void Plotly.restyle(this.id, { 'marker.color': [bottomColors] }, [1])
 
-      const stickShapes: Partial<Plotly.Shape>[] = []
-      if (top) {
-        for (let i = 0; i < top.x.length; i++) {
-          stickShapes.push({
-            type: 'line',
-            x0: top.x[i],
-            x1: top.x[i],
-            y0: 0,
-            y1: top.y[i],
-            line: { color: topColors[i], width: 1.5 },
-          })
-        }
-      }
-      if (bottom) {
-        for (let i = 0; i < bottom.x.length; i++) {
-          stickShapes.push({
-            type: 'line',
-            x0: bottom.x[i],
-            x1: bottom.x[i],
-            y0: 0,
-            y1: -bottom.y[i],
-            line: { color: bottomColors[i], width: 1.5 },
-          })
-        }
-      }
+      const stickShapes: Partial<Plotly.Shape>[] = [
+        ...this.buildStickShapes(top, topColors, 'top'),
+        ...this.buildStickShapes(bottom, bottomColors, 'bottom'),
+      ]
 
       // Rebuild label backgrounds + text — selection state may have changed
       // which annotation rect should be shown in selectedColor.

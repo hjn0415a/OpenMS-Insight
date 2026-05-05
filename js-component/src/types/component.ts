@@ -221,8 +221,7 @@ export interface MirrorPlotComponentArgs extends BaseComponentArgs {
 }
 
 export interface MirrorPlotStyling {
-  topColor?: string
-  bottomColor?: string
+  unhighlightedColor?: string
   highlightColor?: string
   selectedColor?: string
   annotationColors?: Record<string, string>

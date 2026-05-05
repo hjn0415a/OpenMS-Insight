@@ -494,10 +494,9 @@ class MirrorPlot(BaseComponent):
 
     def _get_component_args(self) -> Dict[str, Any]:
         default_styling = {
-            "topColor": "lightblue",
-            "bottomColor": "lightcoral",
             "highlightColor": "#E4572E",
             "selectedColor": "#F3A712",
+            "unhighlightedColor": "lightblue",
             "annotationColors": {
                 "massButton": "#E4572E",
                 "selectedMassButton": "#F3A712",
