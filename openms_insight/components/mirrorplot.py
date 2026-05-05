@@ -1,11 +1,13 @@
 """Mirror plot component using Plotly.js — two spectra, one figure."""
 
+import hashlib
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import polars as pl
 
 from ..core.base import BaseComponent
 from ..core.registry import register_component
+from ..preprocessing.filtering import filter_and_collect_cached
 
 
 @register_component("mirrorplot")
@@ -344,7 +346,142 @@ class MirrorPlot(BaseComponent):
         self._bottom_dynamic_title = None
 
     def _prepare_vue_data(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        raise NotImplementedError("Filled in Task 4")
+        """Filter shared data twice — once per side — and apply per-side annotations."""
+        # Build column projection (deduped, preserving order)
+        projection: list[str] = [self._x_column, self._y_column]
+        if self._highlight_column:
+            projection.append(self._highlight_column)
+        if self._annotation_column:
+            projection.append(self._annotation_column)
+        if self._interactivity:
+            for col in self._interactivity.values():
+                if col not in projection:
+                    projection.append(col)
+        for col in list(self._filters_top.values()) + list(
+            self._filters_bottom.values()
+        ):
+            if col not in projection:
+                projection.append(col)
+
+        # Get cached data (DataFrame or LazyFrame)
+        data = self._preprocessed_data.get("data")
+        if data is None:
+            data = self._raw_data
+        if isinstance(data, pl.DataFrame):
+            data = data.lazy()
+
+        # Filter twice — once per side
+        df_top, hash_top = filter_and_collect_cached(
+            data,
+            self._filters_top,
+            state,
+            columns=projection,
+            filter_defaults=self._filter_defaults_top,
+        )
+        df_bottom, hash_bottom = filter_and_collect_cached(
+            data,
+            self._filters_bottom,
+            state,
+            columns=projection,
+            filter_defaults=self._filter_defaults_bottom,
+        )
+
+        # Apply dynamic annotations per side
+        top_highlight_col = self._highlight_column
+        top_annotation_col = self._annotation_column
+        bot_highlight_col = self._highlight_column
+        bot_annotation_col = self._annotation_column
+
+        if self._top_dynamic_annotations and len(df_top) > 0:
+            df_top = self._apply_annotations_to_df(
+                df_top, self._top_dynamic_annotations
+            )
+            top_highlight_col = "_dynamic_highlight"
+            top_annotation_col = "_dynamic_annotation"
+        if self._bottom_dynamic_annotations and len(df_bottom) > 0:
+            df_bottom = self._apply_annotations_to_df(
+                df_bottom, self._bottom_dynamic_annotations
+            )
+            bot_highlight_col = "_dynamic_highlight"
+            bot_annotation_col = "_dynamic_annotation"
+
+        # Build combined hash; include annotation state if any
+        data_hash = f"{hash_top}_{hash_bottom}"
+        if self._top_dynamic_annotations or self._bottom_dynamic_annotations:
+            ann_payload = (
+                sorted((self._top_dynamic_annotations or {}).keys()),
+                sorted((self._bottom_dynamic_annotations or {}).keys()),
+            )
+            ann_hash = hashlib.md5(str(ann_payload).encode()).hexdigest()[:8]
+            data_hash = f"{data_hash}_{ann_hash}"
+
+        return {
+            "plotDataTop": df_top,
+            "plotDataBottom": df_bottom,
+            "_hash": data_hash,
+            "_plotConfig": self._build_plot_config(
+                top_highlight_col,
+                top_annotation_col,
+                bot_highlight_col,
+                bot_annotation_col,
+            ),
+        }
+
+    def _apply_annotations_to_df(
+        self,
+        df_pandas,
+        annotations: Dict[Any, Dict[str, Any]],
+    ):
+        """Apply dynamic annotations to a pandas DataFrame (per-side helper)."""
+        df_pandas = df_pandas.copy()
+        num_rows = len(df_pandas)
+        highlights = [False] * num_rows
+        labels = [""] * num_rows
+
+        # Use first interactivity column for peak_id lookup
+        id_column = None
+        if self._interactivity:
+            id_column = list(self._interactivity.values())[0]
+
+        if id_column and id_column in df_pandas.columns:
+            for row_idx, peak_id in enumerate(df_pandas[id_column].tolist()):
+                if peak_id in annotations:
+                    entry = annotations[peak_id]
+                    highlights[row_idx] = entry.get("highlight", False)
+                    labels[row_idx] = entry.get("annotation", "")
+        else:
+            # Legacy fallback — index-keyed
+            for idx, entry in annotations.items():
+                if isinstance(idx, int) and 0 <= idx < num_rows:
+                    highlights[idx] = entry.get("highlight", False)
+                    labels[idx] = entry.get("annotation", "")
+
+        df_pandas["_dynamic_highlight"] = highlights
+        df_pandas["_dynamic_annotation"] = labels
+        return df_pandas
+
+    def _build_plot_config(
+        self,
+        top_highlight_col: Optional[str],
+        top_annotation_col: Optional[str],
+        bot_highlight_col: Optional[str],
+        bot_annotation_col: Optional[str],
+    ) -> Dict[str, Any]:
+        """Plot config sent alongside data — Vue uses it to map columns per side."""
+        return {
+            "xColumn": self._x_column,
+            "yColumn": self._y_column,
+            "topHighlightColumn": top_highlight_col,
+            "topAnnotationColumn": top_annotation_col,
+            "bottomHighlightColumn": bot_highlight_col,
+            "bottomAnnotationColumn": bot_annotation_col,
+            "interactivityColumns": {
+                col: col
+                for col in (
+                    self._interactivity.values() if self._interactivity else []
+                )
+            },
+        }
 
     def _get_component_args(self) -> Dict[str, Any]:
         raise NotImplementedError("Filled in Task 5")
