@@ -687,6 +687,67 @@ class MirrorPlot(BaseComponent):
         )
         return vue_data
 
+    def __call__(
+        self,
+        key: Optional[str] = None,
+        state_manager: Optional["StateManager"] = None,
+        height: Optional[int] = None,
+        sequence_view_top_key: Optional[str] = None,
+        sequence_view_bottom_key: Optional[str] = None,
+    ) -> Any:
+        """Render the component.
+
+        Args:
+            key: Optional unique key for the Streamlit component.
+            state_manager: Optional StateManager for cross-component state.
+                If not provided, uses a default shared StateManager.
+            height: Optional height in pixels for the component.
+            sequence_view_top_key: Optional key of a SequenceView whose
+                annotations should be applied to the top spectrum. Calls
+                get_component_annotations and routes to set_top_dynamic_annotations.
+            sequence_view_bottom_key: Same for bottom spectrum.
+
+        Each SequenceView linkage is independent — wire one, both, or neither.
+        """
+        from ..core.state import get_default_state_manager
+        from ..rendering.bridge import get_component_annotations, render_component
+
+        if state_manager is None:
+            state_manager = get_default_state_manager()
+
+        def _annotations_from_sv(sv_key: str) -> Optional[Dict[Any, Dict[str, Any]]]:
+            df = get_component_annotations(sv_key)
+            if df is None or df.height == 0:
+                return None
+            result: Dict[Any, Dict[str, Any]] = {}
+            for row in df.iter_rows(named=True):
+                peak_id = row.get("peak_id")
+                if peak_id is not None:
+                    result[peak_id] = {
+                        "highlight": True,
+                        "annotation": row.get("annotation", ""),
+                        "color": row.get("highlight_color", "#E4572E"),
+                    }
+            return result
+
+        if sequence_view_top_key:
+            anns = _annotations_from_sv(sequence_view_top_key)
+            if anns:
+                self.set_top_dynamic_annotations(anns)
+            else:
+                self.clear_dynamic_annotations(side="top")
+
+        if sequence_view_bottom_key:
+            anns = _annotations_from_sv(sequence_view_bottom_key)
+            if anns:
+                self.set_bottom_dynamic_annotations(anns)
+            else:
+                self.clear_dynamic_annotations(side="bottom")
+
+        return render_component(
+            component=self, state_manager=state_manager, key=key, height=height
+        )
+
 
 if TYPE_CHECKING:
     from ..core.state import StateManager  # noqa: F401
