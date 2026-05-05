@@ -255,13 +255,50 @@ class MirrorPlot(BaseComponent):
 
     # The remaining abstract methods are stubs filled in by later tasks.
     def _preprocess(self) -> None:
-        raise NotImplementedError("Filled in Task 2")
+        """
+        Preprocess shared data for both halves.
+
+        Sorts by the union of top and bottom filter columns to enable
+        Polars predicate pushdown when filtering by either selection state.
+        Stores the LazyFrame; the base class streams to parquet via sink_parquet.
+        """
+        data = self._raw_data
+
+        # Union of top + bottom filter columns, deduped, preserving order
+        sort_columns = []
+        for col in list(self._filters_top.values()) + list(
+            self._filters_bottom.values()
+        ):
+            if col not in sort_columns:
+                sort_columns.append(col)
+
+        if sort_columns:
+            data = data.sort(sort_columns)
+
+        # Store configuration in preprocessed data for serialization
+        self._preprocessed_data["plot_config"] = {
+            "x_column": self._x_column,
+            "y_column": self._y_column,
+            "highlight_column": self._highlight_column,
+            "annotation_column": self._annotation_column,
+        }
+
+        # Keep lazy — base class streams to parquet
+        self._preprocessed_data["data"] = data
+
+    def _get_row_group_size(self) -> int:
+        """Smaller row groups for filtered components (better predicate pushdown)."""
+        return 10_000
 
     def _get_vue_component_name(self) -> str:
         return "PlotlyMirrorPlot"
 
     def _get_data_key(self) -> str:
         return "plotDataTop"
+
+    def get_state_dependencies(self) -> list:
+        """Both per-side filter identifiers; interactivity excluded so clicks don't invalidate cache."""
+        return list(self._filters_top.keys()) + list(self._filters_bottom.keys())
 
     def _get_cache_config(self) -> Dict[str, Any]:
         raise NotImplementedError("Filled in Task 3")
