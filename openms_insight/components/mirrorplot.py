@@ -610,6 +610,83 @@ class MirrorPlot(BaseComponent):
             self._bottom_dynamic_title = None
         return self
 
+    def _strip_dynamic_columns(self, vue_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Drop dynamic annotation columns from both DataFrames before caching.
+
+        Called by bridge.py when storing vue_data in the runtime cache, so
+        future cache hits don't carry stale annotation state. _plotConfig is
+        also dropped because it may reference dynamic column names —
+        _apply_fresh_annotations rebuilds it.
+        """
+        import pandas as pd
+
+        vue_data = dict(vue_data)
+        dynamic_cols = ["_dynamic_highlight", "_dynamic_annotation"]
+
+        for key in ("plotDataTop", "plotDataBottom"):
+            df = vue_data.get(key)
+            if df is not None and isinstance(df, pd.DataFrame):
+                drop = [c for c in dynamic_cols if c in df.columns]
+                if drop:
+                    vue_data[key] = df.drop(columns=drop)
+
+        vue_data.pop("_plotConfig", None)
+        return vue_data
+
+    def _apply_fresh_annotations(self, vue_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Re-apply current top/bottom dynamic annotations to cached base vue_data.
+
+        Called by bridge.py on cache hits when dynamic annotations are active.
+        Builds a fresh _plotConfig that points to the dynamic columns where
+        applicable.
+        """
+        import pandas as pd
+
+        vue_data = dict(vue_data)
+        df_top = vue_data.get("plotDataTop")
+        df_bottom = vue_data.get("plotDataBottom")
+        if df_top is None or df_bottom is None:
+            return vue_data
+        if not isinstance(df_top, pd.DataFrame) or not isinstance(df_bottom, pd.DataFrame):
+            return vue_data
+
+        top_highlight_col = self._highlight_column
+        top_annotation_col = self._annotation_column
+        bot_highlight_col = self._highlight_column
+        bot_annotation_col = self._annotation_column
+
+        if self._top_dynamic_annotations and len(df_top) > 0:
+            df_top = self._apply_annotations_to_df(df_top, self._top_dynamic_annotations)
+            top_highlight_col = "_dynamic_highlight"
+            top_annotation_col = "_dynamic_annotation"
+        if self._bottom_dynamic_annotations and len(df_bottom) > 0:
+            df_bottom = self._apply_annotations_to_df(
+                df_bottom, self._bottom_dynamic_annotations
+            )
+            bot_highlight_col = "_dynamic_highlight"
+            bot_annotation_col = "_dynamic_annotation"
+
+        # Rebuild combined hash with annotation state
+        existing_hash = vue_data.get("_hash", "")
+        if self._top_dynamic_annotations or self._bottom_dynamic_annotations:
+            ann_payload = (
+                sorted((self._top_dynamic_annotations or {}).keys()),
+                sorted((self._bottom_dynamic_annotations or {}).keys()),
+            )
+            ann_hash = hashlib.md5(str(ann_payload).encode()).hexdigest()[:8]
+            existing_hash = f"{existing_hash}_{ann_hash}"
+
+        vue_data["plotDataTop"] = df_top
+        vue_data["plotDataBottom"] = df_bottom
+        vue_data["_hash"] = existing_hash
+        vue_data["_plotConfig"] = self._build_plot_config(
+            top_highlight_col=top_highlight_col,
+            top_annotation_col=top_annotation_col,
+            bot_highlight_col=bot_highlight_col,
+            bot_annotation_col=bot_annotation_col,
+        )
+        return vue_data
+
 
 if TYPE_CHECKING:
     from ..core.state import StateManager  # noqa: F401

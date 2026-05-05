@@ -331,3 +331,66 @@ class TestMirrorPlotDynamicAnnotations:
         assert comp.set_top_dynamic_annotations({}) is comp
         assert comp.set_bottom_dynamic_annotations({}) is comp
         assert comp.clear_dynamic_annotations() is comp
+
+
+class TestMirrorPlotBridgeIntegration:
+    def _make(self, temp_cache_dir, data, **overrides):
+        defaults = {
+            "cache_id": "test_bridge",
+            "data": data,
+            "cache_path": str(temp_cache_dir),
+            "filters_top": {"spectrum_top": "scan_id"},
+            "filters_bottom": {"spectrum_bottom": "scan_id"},
+            "interactivity": {"selected_peak": "peak_id"},
+            "x_column": "mass",
+            "y_column": "intensity",
+        }
+        defaults.update(overrides)
+        return MirrorPlot(**defaults)
+
+    def test_strip_drops_dynamic_columns_from_both(
+        self, mock_streamlit, temp_cache_dir, sample_lineplot_data
+    ):
+        comp = self._make(temp_cache_dir, sample_lineplot_data)
+        # Build vue_data containing dynamic cols on both sides
+        comp.set_top_dynamic_annotations(
+            {10: {"highlight": True, "annotation": "b1"}}
+        )
+        comp.set_bottom_dynamic_annotations(
+            {40: {"highlight": True, "annotation": "y3"}}
+        )
+        vue_data = comp._prepare_vue_data(
+            {"spectrum_top": 1, "spectrum_bottom": 2}
+        )
+        assert "_dynamic_highlight" in vue_data["plotDataTop"].columns
+        assert "_dynamic_highlight" in vue_data["plotDataBottom"].columns
+
+        stripped = comp._strip_dynamic_columns(vue_data)
+        assert "_dynamic_highlight" not in stripped["plotDataTop"].columns
+        assert "_dynamic_annotation" not in stripped["plotDataTop"].columns
+        assert "_dynamic_highlight" not in stripped["plotDataBottom"].columns
+        assert "_dynamic_annotation" not in stripped["plotDataBottom"].columns
+        # _plotConfig also removed (may reference dynamic column names)
+        assert "_plotConfig" not in stripped
+
+    def test_apply_fresh_annotations_top_only(
+        self, mock_streamlit, temp_cache_dir, sample_lineplot_data
+    ):
+        comp = self._make(temp_cache_dir, sample_lineplot_data)
+        # Build cached vue_data with no annotations
+        cached = comp._prepare_vue_data(
+            {"spectrum_top": 1, "spectrum_bottom": 2}
+        )
+        cached_clean = comp._strip_dynamic_columns(cached)
+
+        # Set top annotations only
+        comp.set_top_dynamic_annotations(
+            {10: {"highlight": True, "annotation": "b1"}}
+        )
+        refreshed = comp._apply_fresh_annotations(cached_clean)
+
+        assert "_dynamic_highlight" in refreshed["plotDataTop"].columns
+        # Bottom must NOT have dynamic columns since no bottom annotations set
+        assert "_dynamic_highlight" not in refreshed["plotDataBottom"].columns
+        # _plotConfig rebuilt
+        assert "_plotConfig" in refreshed
