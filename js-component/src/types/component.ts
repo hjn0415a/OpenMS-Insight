@@ -199,6 +199,31 @@ export type HeatmapData = Record<string, unknown>
 export type VolcanoData = Record<string, unknown>
 
 /**
+ * MirrorPlot component arguments.
+ */
+export interface MirrorPlotComponentArgs extends BaseComponentArgs {
+  componentType: 'PlotlyMirrorPlot'
+  xColumn: string
+  yColumn: string
+  highlightColumn?: string
+  annotationColumn?: string
+  title?: string
+  titleTop?: string
+  titleBottom?: string
+  xLabel?: string
+  yLabel?: string
+  interactivity?: InteractivityMapping
+  styling?: {
+    topColor?: string
+    bottomColor?: string
+    highlightColor?: string
+    selectedColor?: string
+    annotationColors?: Record<string, string>
+  }
+  config?: Record<string, unknown>
+}
+
+/**
  * Union type for all component arguments.
  */
 export type ComponentArgs =
@@ -207,6 +232,7 @@ export type ComponentArgs =
   | HeatmapComponentArgs
   | SequenceViewComponentArgs
   | VolcanoPlotComponentArgs
+  | MirrorPlotComponentArgs
 
 /**
  * Component layout entry.
