@@ -64,6 +64,7 @@ export default defineComponent({
   data() {
     return {
       isInitialized: false as boolean,
+      manualXRange: undefined as number[] | undefined,
       textMeasureCanvas: null as HTMLCanvasElement | null,
     }
   },
@@ -98,20 +99,42 @@ export default defineComponent({
         'bottomAnnotationColumn',
       )
     },
-    /** Maximum positive y value across both sides (data values are positive). */
+    /**
+     * Maximum positive y value within the visible x range across both sides.
+     * Re-evaluates on zoom so the y-axis scales to the currently shown peaks
+     * (matches PlotlyLineplot's yRange behavior).
+     */
     yMaxData(): number {
+      const xRange = this.xRange
+      const topX = this.topData?.x ?? []
       const topY = this.topData?.y ?? []
+      const bottomX = this.bottomData?.x ?? []
       const bottomY = this.bottomData?.y ?? []
-      const topMax = topY.reduce((m, v) => (v > m ? v : m), 0)
-      const bottomMax = bottomY.reduce((m, v) => (v > m ? v : m), 0)
-      return Math.max(topMax, bottomMax, 1.0)
+      let maxY = 0
+      for (let i = 0; i < topX.length; i++) {
+        if (topX[i] >= xRange[0] && topX[i] <= xRange[1] && topY[i] > maxY) {
+          maxY = topY[i]
+        }
+      }
+      for (let i = 0; i < bottomX.length; i++) {
+        if (bottomX[i] >= xRange[0] && bottomX[i] <= xRange[1] && bottomY[i] > maxY) {
+          maxY = bottomY[i]
+        }
+      }
+      return Math.max(maxY, 1.0)
     },
     /** Half-height of the y-axis range. Matches PlotlyLineplot's 1.8× expansion. */
     yRangeMax(): number {
       return this.yMaxData * 1.8
     },
-    /** X range covering both sides, with 2% padding (used for label fit calculations). */
+    /**
+     * X range covering both sides, with 2% padding. Returns manual zoom
+     * range when the user has zoomed/panned (set by onRelayout).
+     */
     xRange(): number[] {
+      if (this.manualXRange) {
+        return this.manualXRange
+      }
       const xs: number[] = []
       if (this.topData) xs.push(...this.topData.x)
       if (this.bottomData) xs.push(...this.bottomData.x)
@@ -146,12 +169,16 @@ export default defineComponent({
   watch: {
     topData: {
       handler() {
+        // Data changed (e.g., new spectrum selected) — reset zoom so the new
+        // data is shown at full extent. Matches PlotlyLineplot's plotData watcher.
+        this.manualXRange = undefined
         this.render()
       },
       deep: true,
     },
     bottomData: {
       handler() {
+        this.manualXRange = undefined
         this.render()
       },
       deep: true,
@@ -509,6 +536,39 @@ export default defineComponent({
           }
         }
       })
+
+      // Wire relayout handler so x-zoom/pan triggers a re-render with
+      // recomputed y-axis range and re-evaluated label visibility.
+      plotEl.removeAllListeners?.('plotly_relayout')
+      plotEl.on('plotly_relayout', (eventData: Plotly.PlotRelayoutEvent) => {
+        this.onRelayout(eventData as unknown as Record<string, unknown>)
+      })
+    },
+
+    /**
+     * Capture x-axis zoom/pan from Plotly. Stores the new range in
+     * `manualXRange` so the next render() recomputes yMaxData (visible-only)
+     * and re-runs annotation overlap detection at the new pixel/data ratio
+     * — matches PlotlyLineplot's behavior.
+     */
+    onRelayout(eventData: Record<string, unknown>): void {
+      if (
+        eventData['xaxis.range[0]'] !== undefined &&
+        eventData['xaxis.range[1]'] !== undefined
+      ) {
+        const newXRange = [
+          eventData['xaxis.range[0]'] as number,
+          eventData['xaxis.range[1]'] as number,
+        ]
+        if (newXRange[0] < 0) {
+          newXRange[0] = 0
+        }
+        this.manualXRange = newXRange
+        this.render()
+      } else if (eventData['xaxis.autorange'] === true) {
+        this.manualXRange = undefined
+        this.render()
+      }
     },
 
     colorsForSide(side: SideData | undefined): string[] {
