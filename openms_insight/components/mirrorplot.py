@@ -499,7 +499,58 @@ class MirrorPlot(BaseComponent):
         }
 
     def _get_component_args(self) -> Dict[str, Any]:
-        raise NotImplementedError("Filled in Task 5")
+        default_styling = {
+            "topColor": "lightblue",
+            "bottomColor": "lightcoral",
+            "highlightColor": "#E4572E",
+            "selectedColor": "#F3A712",
+            "annotationColors": {
+                "massButton": "#E4572E",
+                "selectedMassButton": "#F3A712",
+                "background": "#f0f0f0",
+                "buttonHover": "#e0e0e0",
+            },
+        }
+
+        styling = {**default_styling, **self._styling}
+        if "annotationColors" in self._styling:
+            styling["annotationColors"] = {
+                **default_styling["annotationColors"],
+                **self._styling["annotationColors"],
+            }
+
+        # Use dynamic titles if set
+        title_top = (
+            self._top_dynamic_title
+            if self._top_dynamic_title is not None
+            else (self._title_top or "")
+        )
+        title_bottom = (
+            self._bottom_dynamic_title
+            if self._bottom_dynamic_title is not None
+            else (self._title_bottom or "")
+        )
+
+        args: Dict[str, Any] = {
+            "componentType": self._get_vue_component_name(),
+            "title": self._title or "",
+            "titleTop": title_top,
+            "titleBottom": title_bottom,
+            "xLabel": self._x_label,
+            "yLabel": self._y_label,
+            "xColumn": self._x_column,
+            "yColumn": self._y_column,
+            "highlightColumn": self._highlight_column,
+            "annotationColumn": self._annotation_column,
+            "interactivity": self._interactivity,
+            "styling": styling,
+            "config": self._plot_config,
+        }
+        # Inject any extra user-provided keys without overwriting explicitly set ones
+        for key, val in self._config.items():
+            if key not in args:
+                args[key] = val
+        return args
 
 
 if TYPE_CHECKING:

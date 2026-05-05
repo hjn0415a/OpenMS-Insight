@@ -178,3 +178,64 @@ class TestMirrorPlotPrepareVueData:
         assert result["bottomHighlightColumn"] == "highlight_col_name"
         assert result["topAnnotationColumn"] == "annotation_col_name"
         assert result["bottomAnnotationColumn"] == "annotation_col_name"
+
+
+class TestMirrorPlotComponentArgs:
+    def _make(self, temp_cache_dir, data, **overrides):
+        defaults = {
+            "cache_id": "test_args",
+            "data": data,
+            "cache_path": str(temp_cache_dir),
+            "filters_top": {"spectrum_top": "scan_id"},
+            "filters_bottom": {"spectrum_bottom": "scan_id"},
+            "interactivity": {"selected_peak": "peak_id"},
+            "x_column": "mass",
+            "y_column": "intensity",
+        }
+        defaults.update(overrides)
+        return MirrorPlot(**defaults)
+
+    def test_includes_componentType(
+        self, mock_streamlit, temp_cache_dir, sample_lineplot_data
+    ):
+        comp = self._make(temp_cache_dir, sample_lineplot_data)
+        args = comp._get_component_args()
+        assert args["componentType"] == "PlotlyMirrorPlot"
+
+    def test_carries_per_side_titles_and_columns(
+        self, mock_streamlit, temp_cache_dir, sample_lineplot_data
+    ):
+        comp = self._make(
+            temp_cache_dir,
+            sample_lineplot_data,
+            title="Compare",
+            title_top="A",
+            title_bottom="B",
+            x_label="m/z",
+            y_label="Intensity",
+        )
+        args = comp._get_component_args()
+        assert args["title"] == "Compare"
+        assert args["titleTop"] == "A"
+        assert args["titleBottom"] == "B"
+        assert args["xLabel"] == "m/z"
+        assert args["yLabel"] == "Intensity"
+        assert args["xColumn"] == "mass"
+        assert args["yColumn"] == "intensity"
+        assert args["interactivity"] == {"selected_peak": "peak_id"}
+
+    def test_styling_merged_with_defaults(
+        self, mock_streamlit, temp_cache_dir, sample_lineplot_data
+    ):
+        comp = self._make(
+            temp_cache_dir,
+            sample_lineplot_data,
+            styling={"topColor": "#1f77b4"},
+        )
+        args = comp._get_component_args()
+        # Override applied
+        assert args["styling"]["topColor"] == "#1f77b4"
+        # Defaults preserved for unspecified keys
+        assert "bottomColor" in args["styling"]
+        assert "highlightColor" in args["styling"]
+        assert "selectedColor" in args["styling"]
