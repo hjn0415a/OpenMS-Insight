@@ -258,6 +258,27 @@ export default defineComponent({
 
       await Plotly.newPlot(element, traces, layout, { responsive: true })
       this.isInitialized = true
+
+      // Wire click handler for interactivity
+      const plotEl = element as Plotly.PlotlyHTMLElement
+      plotEl.removeAllListeners?.('plotly_click')
+      plotEl.on('plotly_click', (event: Plotly.PlotMouseEvent) => {
+        const pt = event.points?.[0]
+        if (!pt) return
+        const traceIdx = pt.curveNumber
+        const sourceData = traceIdx === 0 ? this.topData : this.bottomData
+        if (!sourceData) return
+
+        const interactivity = this.args.interactivity
+        if (!interactivity) return
+
+        for (const [identifier, column] of Object.entries(interactivity)) {
+          const values = sourceData.interactivityValues?.[column]
+          if (values && pt.pointIndex !== undefined) {
+            this.selectionStore.updateSelection(identifier, values[pt.pointIndex])
+          }
+        }
+      })
     },
 
     colorsForSide(side: SideData | undefined, baseColor: string): string[] {
@@ -299,7 +320,44 @@ export default defineComponent({
     },
 
     recolor() {
-      // Implemented in Task 13
+      if (!this.isInitialized) return
+      const top = this.topData
+      const bottom = this.bottomData
+
+      const topColors = this.colorsForSide(top, this.styling.topColor)
+      const bottomColors = this.colorsForSide(bottom, this.styling.bottomColor)
+
+      // Update marker colors on existing traces
+      void Plotly.restyle(this.id, { 'marker.color': [topColors] }, [0])
+      void Plotly.restyle(this.id, { 'marker.color': [bottomColors] }, [1])
+
+      // Rebuild shapes with updated colors (no x/y recomputation needed)
+      const shapes: Partial<Plotly.Shape>[] = []
+      if (top) {
+        for (let i = 0; i < top.x.length; i++) {
+          shapes.push({
+            type: 'line',
+            x0: top.x[i],
+            x1: top.x[i],
+            y0: 0,
+            y1: top.y[i],
+            line: { color: topColors[i], width: 1.5 },
+          })
+        }
+      }
+      if (bottom) {
+        for (let i = 0; i < bottom.x.length; i++) {
+          shapes.push({
+            type: 'line',
+            x0: bottom.x[i],
+            x1: bottom.x[i],
+            y0: 0,
+            y1: -bottom.y[i],
+            line: { color: bottomColors[i], width: 1.5 },
+          })
+        }
+      }
+      void Plotly.relayout(this.id, { shapes })
     },
   },
 })
