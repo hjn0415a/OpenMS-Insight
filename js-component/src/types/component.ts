@@ -203,24 +203,29 @@ export type VolcanoData = Record<string, unknown>
  */
 export interface MirrorPlotComponentArgs extends BaseComponentArgs {
   componentType: 'PlotlyMirrorPlot'
+  title?: string
+  /** Label shown inside the top half of the figure. */
+  titleTop?: string
+  /** Label shown inside the bottom half of the figure. */
+  titleBottom?: string
   xColumn: string
   yColumn: string
   highlightColumn?: string
   annotationColumn?: string
-  title?: string
-  titleTop?: string
-  titleBottom?: string
   xLabel?: string
   yLabel?: string
   interactivity?: InteractivityMapping
-  styling?: {
-    topColor?: string
-    bottomColor?: string
-    highlightColor?: string
-    selectedColor?: string
-    annotationColors?: Record<string, string>
-  }
+  styling?: MirrorPlotStyling
   config?: Record<string, unknown>
+  height?: number
+}
+
+export interface MirrorPlotStyling {
+  topColor?: string
+  bottomColor?: string
+  highlightColor?: string
+  selectedColor?: string
+  annotationColors?: Record<string, string>
 }
 
 /**
