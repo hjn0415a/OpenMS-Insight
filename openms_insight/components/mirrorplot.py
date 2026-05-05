@@ -307,7 +307,6 @@ class MirrorPlot(BaseComponent):
             "filters_bottom": self._filters_bottom,
             "filter_defaults_top": self._filter_defaults_top,
             "filter_defaults_bottom": self._filter_defaults_bottom,
-            "interactivity": self._interactivity,
             "x_column": self._x_column,
             "y_column": self._y_column,
             "highlight_column": self._highlight_column,
@@ -327,7 +326,6 @@ class MirrorPlot(BaseComponent):
         self._filters_bottom = config.get("filters_bottom") or {}
         self._filter_defaults_top = config.get("filter_defaults_top") or {}
         self._filter_defaults_bottom = config.get("filter_defaults_bottom") or {}
-        self._interactivity = config.get("interactivity") or {}
         self._x_column = config.get("x_column", "x")
         self._y_column = config.get("y_column", "y")
         self._highlight_column = config.get("highlight_column")
@@ -337,8 +335,8 @@ class MirrorPlot(BaseComponent):
         self._title_bottom = config.get("title_bottom")
         self._x_label = config.get("x_label", self._x_column)
         self._y_label = config.get("y_label", self._y_column)
-        self._styling = config.get("styling") or {}
-        self._plot_config = config.get("plot_config") or {}
+        self._styling = config.get("styling", {})
+        self._plot_config = config.get("plot_config", {})
         # Dynamic state (not cached) — reset to None
         self._top_dynamic_annotations = None
         self._bottom_dynamic_annotations = None

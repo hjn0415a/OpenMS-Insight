@@ -36,7 +36,6 @@ class TestMirrorPlotContract:
         assert config["filters_bottom"] == {"spectrum_bottom": "scan_id"}
         assert config["filter_defaults_top"] == {"spectrum_top": 1}
         assert config["filter_defaults_bottom"] == {"spectrum_bottom": 2}
-        assert config["interactivity"] == {"selected_peak": "peak_id"}
         assert config["x_column"] == "mass"
         assert config["y_column"] == "intensity"
         assert config["highlight_column"] == "annotation"
@@ -69,3 +68,14 @@ class TestMirrorPlotContract:
         assert restored._title_bottom == "PSM B"
         assert restored._top_dynamic_annotations is None
         assert restored._bottom_dynamic_annotations is None
+        assert restored._top_dynamic_title is None
+        assert restored._bottom_dynamic_title is None
+        assert restored._x_column == "mass"
+        assert restored._y_column == "intensity"
+        assert restored._highlight_column == "annotation"
+        assert restored._annotation_column == "annotation"
+        assert restored._title == "Compare"
+        assert restored._x_label == "m/z"
+        assert restored._y_label == "Intensity"
+        assert restored._styling == {"topColor": "#1f77b4", "bottomColor": "#d62728"}
+        assert restored._plot_config == {"displayModeBar": True}
