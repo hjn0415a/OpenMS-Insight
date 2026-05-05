@@ -298,6 +298,20 @@ class TestMirrorPlotDynamicAnnotations:
             40: {"highlight": True, "annotation": "y3"}
         }
 
+    def test_clear_bottom_only(
+        self, mock_streamlit, temp_cache_dir, sample_lineplot_data
+    ):
+        comp = self._make(temp_cache_dir, sample_lineplot_data)
+        comp.set_top_dynamic_annotations({10: {"highlight": True, "annotation": "b1"}})
+        comp.set_bottom_dynamic_annotations({40: {"highlight": True, "annotation": "y3"}})
+        comp.clear_dynamic_annotations(side="bottom")
+        assert comp._bottom_dynamic_annotations is None
+        assert comp._bottom_dynamic_title is None
+        # Top untouched
+        assert comp._top_dynamic_annotations == {
+            10: {"highlight": True, "annotation": "b1"}
+        }
+
     def test_clear_both(
         self, mock_streamlit, temp_cache_dir, sample_lineplot_data
     ):
