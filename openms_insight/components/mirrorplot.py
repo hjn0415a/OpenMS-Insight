@@ -1,6 +1,6 @@
 """Mirror plot component using Plotly.js — two spectra, one figure."""
 
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import polars as pl
 
@@ -287,7 +287,7 @@ class MirrorPlot(BaseComponent):
         self._preprocessed_data["data"] = data
 
     def _get_row_group_size(self) -> int:
-        """Smaller row groups for filtered components (better predicate pushdown)."""
+        """Always 10_000 — constructor enforces non-empty filters on both sides."""
         return 10_000
 
     def _get_vue_component_name(self) -> str:
@@ -296,7 +296,7 @@ class MirrorPlot(BaseComponent):
     def _get_data_key(self) -> str:
         return "plotDataTop"
 
-    def get_state_dependencies(self) -> list:
+    def get_state_dependencies(self) -> List[str]:
         """Both per-side filter identifiers; interactivity excluded so clicks don't invalidate cache."""
         return list(self._filters_top.keys()) + list(self._filters_bottom.keys())
 

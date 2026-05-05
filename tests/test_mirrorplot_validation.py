@@ -89,6 +89,18 @@ class TestMirrorPlotValidation:
                 y_column="intensity",
             )
 
+    def test_state_dependencies_returns_identifier_keys(
+        self, mock_streamlit, temp_cache_dir, sample_lineplot_data
+    ):
+        """get_state_dependencies returns identifier names (.keys()), not column names (.values())."""
+        mp = MirrorPlot.__new__(MirrorPlot)
+        mp._filters_top = {"spectrum_top": "scan_id"}
+        mp._filters_bottom = {"spectrum_bottom": "scan_id"}
+        deps = mp.get_state_dependencies()
+        assert deps == ["spectrum_top", "spectrum_bottom"]
+        # Sanity check: filter columns (values) are NOT in the deps
+        assert "scan_id" not in deps
+
     def test_reconstruct_from_cache_only(
         self, mock_streamlit, temp_cache_dir, sample_lineplot_data
     ):
