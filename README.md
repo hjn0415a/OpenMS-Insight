@@ -14,6 +14,7 @@ Interactive visualization components for mass spectrometry data in Streamlit, ba
 - **Cache reconstruction** - components can be restored from cache without re-specifying configuration
 - **Table component** (Tabulator.js) with server-side pagination, filtering, sorting, go-to, CSV export
 - **Line plot component** (Plotly.js) with highlighting, annotations, zoom
+- **Mirror plot component** for paired-spectrum comparison with independent per-side filtering and shared click selection
 - **Heatmap component** (Plotly scattergl) with multi-resolution downsampling for millions of points
 - **Volcano plot component** for differential expression visualization with significance thresholds
 - **Sequence view component** for peptide visualization with fragment ion matching and auto-zoom
@@ -180,6 +181,46 @@ LinePlot(
 - `highlight_column`: Boolean/int column indicating which points to highlight
 - `annotation_column`: Text column for labels on highlighted points
 - `styling`: Color configuration dict
+
+### MirrorPlot
+
+Two stick-style spectra rendered against a shared x-axis with the bottom half flipped, used for comparing paired spectra (experimental vs. theoretical, sample vs. reference, MS1 vs. MS2 fragments). Each half is filtered independently, while clicks on either half feed into one shared selection.
+
+```python
+from openms_insight import MirrorPlot
+
+mirror = MirrorPlot(
+    cache_id="mirror",
+    data_path="peaks.parquet",
+    filters_top={'spectrum_a': 'scan_id'},      # top half follows spectrum_a
+    filters_bottom={'spectrum_b': 'scan_id'},   # bottom half follows spectrum_b
+    interactivity={'selected_peak': 'peak_id'}, # click in either half -> shared
+    x_column='mass',
+    y_column='intensity',                       # positive for both halves
+    highlight_column='is_annotated',
+    annotation_column='ion_label',
+    title_top="Experimental",
+    title_bottom="Reference",
+    x_label="m/z",
+    y_label="Intensity",
+)
+mirror(state_manager=state_manager, height=600)
+```
+
+**Key parameters:**
+- `filters_top` / `filters_bottom`: Per-side filter mappings (independent selections drive each half)
+- `filter_defaults_top` / `filter_defaults_bottom`: Per-side default values when the corresponding selection is `None`
+- `interactivity`: Shared across both halves — a click in either half writes the same identifier
+- `x_column`, `y_column`: Shared schema. Provide y values as positive numbers; the bottom half is flipped at render time
+- `highlight_column`, `annotation_column`: Shared schema for highlights and label text
+- `title_top`, `title_bottom`: In-figure labels for each half (rendered inside the plot, not above it)
+- `styling`: Color dict with `highlightColor`, `selectedColor`, `unhighlightedColor` (same defaults as LinePlot)
+
+**Behavior:**
+- The y-axis auto-rescales to the maximum visible peak when zooming, and overlapping annotation labels are re-evaluated at the new pixel/data ratio so previously hidden labels reappear when there is room (matches LinePlot's zoom behavior)
+- Tick labels show absolute intensity on both sides — the bottom half is flipped only for layout, not for the displayed values
+- Marker traces are kept in addition to stick shapes so Plotly fires `plotly_click` events; the click handler picks the side via `curveNumber` and routes the row's interactivity column value to the shared selection
+- `set_top_dynamic_annotations(...)` / `set_bottom_dynamic_annotations(...)` allow another component (e.g. a `SequenceView`) to push fragment-ion annotations into one half without invalidating the cache
 
 ### Heatmap
 

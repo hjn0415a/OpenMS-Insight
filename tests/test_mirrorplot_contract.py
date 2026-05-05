@@ -28,7 +28,7 @@ class TestMirrorPlotContract:
             title_bottom="PSM B",
             x_label="m/z",
             y_label="Intensity",
-            styling={"topColor": "#1f77b4", "bottomColor": "#d62728"},
+            styling={"unhighlightedColor": "#1f77b4"},
             config={"displayModeBar": True},
         )
         config = original._get_cache_config()
@@ -47,7 +47,7 @@ class TestMirrorPlotContract:
         assert config["title_bottom"] == "PSM B"
         assert config["x_label"] == "m/z"
         assert config["y_label"] == "Intensity"
-        assert config["styling"] == {"topColor": "#1f77b4", "bottomColor": "#d62728"}
+        assert config["styling"] == {"unhighlightedColor": "#1f77b4"}
         assert config["plot_config"] == {"displayModeBar": True}
 
         # Restore on a fresh instance
@@ -79,7 +79,7 @@ class TestMirrorPlotContract:
         assert restored._title == "Compare"
         assert restored._x_label == "m/z"
         assert restored._y_label == "Intensity"
-        assert restored._styling == {"topColor": "#1f77b4", "bottomColor": "#d62728"}
+        assert restored._styling == {"unhighlightedColor": "#1f77b4"}
         assert restored._plot_config == {"displayModeBar": True}
 
 
@@ -222,13 +222,12 @@ class TestMirrorPlotComponentArgs:
         comp = self._make(
             temp_cache_dir,
             sample_lineplot_data,
-            styling={"topColor": "#1f77b4"},
+            styling={"unhighlightedColor": "#1f77b4"},
         )
         args = comp._get_component_args()
         # Override applied
-        assert args["styling"]["topColor"] == "#1f77b4"
+        assert args["styling"]["unhighlightedColor"] == "#1f77b4"
         # Defaults preserved for unspecified keys
-        assert "bottomColor" in args["styling"]
         assert "highlightColor" in args["styling"]
         assert "selectedColor" in args["styling"]
 
