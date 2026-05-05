@@ -331,7 +331,7 @@ export default defineComponent({
       void Plotly.restyle(this.id, { 'marker.color': [topColors] }, [0])
       void Plotly.restyle(this.id, { 'marker.color': [bottomColors] }, [1])
 
-      // Rebuild shapes with updated colors (no x/y recomputation needed)
+      // Rebuild shapes with updated colors (no axis range recomputation needed)
       const shapes: Partial<Plotly.Shape>[] = []
       if (top) {
         for (let i = 0; i < top.x.length; i++) {

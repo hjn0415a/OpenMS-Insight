@@ -102,9 +102,7 @@ class TestMirrorPlotPrepareVueData:
         self, mock_streamlit, temp_cache_dir, sample_lineplot_data
     ):
         comp = self._make(temp_cache_dir, sample_lineplot_data)
-        result = comp._prepare_vue_data(
-            {"spectrum_top": 1, "spectrum_bottom": 2}
-        )
+        result = comp._prepare_vue_data({"spectrum_top": 1, "spectrum_bottom": 2})
         assert isinstance(result, dict)
         assert "_hash" in result
         assert isinstance(result["_hash"], str)
@@ -113,9 +111,7 @@ class TestMirrorPlotPrepareVueData:
         self, mock_streamlit, temp_cache_dir, sample_lineplot_data
     ):
         comp = self._make(temp_cache_dir, sample_lineplot_data)
-        result = comp._prepare_vue_data(
-            {"spectrum_top": 1, "spectrum_bottom": 2}
-        )
+        result = comp._prepare_vue_data({"spectrum_top": 1, "spectrum_bottom": 2})
         assert "plotDataTop" in result
         assert "plotDataBottom" in result
         assert isinstance(result["plotDataTop"], pd.DataFrame)
@@ -126,9 +122,7 @@ class TestMirrorPlotPrepareVueData:
     ):
         """Top selection (scan 1) and bottom selection (scan 2) produce disjoint rows."""
         comp = self._make(temp_cache_dir, sample_lineplot_data)
-        result = comp._prepare_vue_data(
-            {"spectrum_top": 1, "spectrum_bottom": 2}
-        )
+        result = comp._prepare_vue_data({"spectrum_top": 1, "spectrum_bottom": 2})
         df_top = result["plotDataTop"]
         df_bot = result["plotDataBottom"]
         # sample_lineplot_data has scan_id [1,1,1,2,2]: scan 1 has 3 rows, scan 2 has 2
@@ -142,9 +136,7 @@ class TestMirrorPlotPrepareVueData:
     ):
         """Vue does the y-flip; Python emits positive intensities for both halves."""
         comp = self._make(temp_cache_dir, sample_lineplot_data)
-        result = comp._prepare_vue_data(
-            {"spectrum_top": 1, "spectrum_bottom": 2}
-        )
+        result = comp._prepare_vue_data({"spectrum_top": 1, "spectrum_bottom": 2})
         assert (result["plotDataTop"]["intensity"] >= 0).all()
         assert (result["plotDataBottom"]["intensity"] >= 0).all()
 
@@ -284,12 +276,12 @@ class TestMirrorPlotDynamicAnnotations:
         assert comp._bottom_dynamic_title == "Bot"
         assert comp._top_dynamic_annotations is None
 
-    def test_clear_top_only(
-        self, mock_streamlit, temp_cache_dir, sample_lineplot_data
-    ):
+    def test_clear_top_only(self, mock_streamlit, temp_cache_dir, sample_lineplot_data):
         comp = self._make(temp_cache_dir, sample_lineplot_data)
         comp.set_top_dynamic_annotations({10: {"highlight": True, "annotation": "b1"}})
-        comp.set_bottom_dynamic_annotations({40: {"highlight": True, "annotation": "y3"}})
+        comp.set_bottom_dynamic_annotations(
+            {40: {"highlight": True, "annotation": "y3"}}
+        )
         comp.clear_dynamic_annotations(side="top")
         assert comp._top_dynamic_annotations is None
         assert comp._top_dynamic_title is None
@@ -303,7 +295,9 @@ class TestMirrorPlotDynamicAnnotations:
     ):
         comp = self._make(temp_cache_dir, sample_lineplot_data)
         comp.set_top_dynamic_annotations({10: {"highlight": True, "annotation": "b1"}})
-        comp.set_bottom_dynamic_annotations({40: {"highlight": True, "annotation": "y3"}})
+        comp.set_bottom_dynamic_annotations(
+            {40: {"highlight": True, "annotation": "y3"}}
+        )
         comp.clear_dynamic_annotations(side="bottom")
         assert comp._bottom_dynamic_annotations is None
         assert comp._bottom_dynamic_title is None
@@ -312,12 +306,12 @@ class TestMirrorPlotDynamicAnnotations:
             10: {"highlight": True, "annotation": "b1"}
         }
 
-    def test_clear_both(
-        self, mock_streamlit, temp_cache_dir, sample_lineplot_data
-    ):
+    def test_clear_both(self, mock_streamlit, temp_cache_dir, sample_lineplot_data):
         comp = self._make(temp_cache_dir, sample_lineplot_data)
         comp.set_top_dynamic_annotations({10: {"highlight": True, "annotation": "b1"}})
-        comp.set_bottom_dynamic_annotations({40: {"highlight": True, "annotation": "y3"}})
+        comp.set_bottom_dynamic_annotations(
+            {40: {"highlight": True, "annotation": "y3"}}
+        )
         comp.clear_dynamic_annotations()  # side=None default
         assert comp._top_dynamic_annotations is None
         assert comp._bottom_dynamic_annotations is None
@@ -353,15 +347,11 @@ class TestMirrorPlotBridgeIntegration:
     ):
         comp = self._make(temp_cache_dir, sample_lineplot_data)
         # Build vue_data containing dynamic cols on both sides
-        comp.set_top_dynamic_annotations(
-            {10: {"highlight": True, "annotation": "b1"}}
-        )
+        comp.set_top_dynamic_annotations({10: {"highlight": True, "annotation": "b1"}})
         comp.set_bottom_dynamic_annotations(
             {40: {"highlight": True, "annotation": "y3"}}
         )
-        vue_data = comp._prepare_vue_data(
-            {"spectrum_top": 1, "spectrum_bottom": 2}
-        )
+        vue_data = comp._prepare_vue_data({"spectrum_top": 1, "spectrum_bottom": 2})
         assert "_dynamic_highlight" in vue_data["plotDataTop"].columns
         assert "_dynamic_highlight" in vue_data["plotDataBottom"].columns
 
@@ -378,15 +368,11 @@ class TestMirrorPlotBridgeIntegration:
     ):
         comp = self._make(temp_cache_dir, sample_lineplot_data)
         # Build cached vue_data with no annotations
-        cached = comp._prepare_vue_data(
-            {"spectrum_top": 1, "spectrum_bottom": 2}
-        )
+        cached = comp._prepare_vue_data({"spectrum_top": 1, "spectrum_bottom": 2})
         cached_clean = comp._strip_dynamic_columns(cached)
 
         # Set top annotations only
-        comp.set_top_dynamic_annotations(
-            {10: {"highlight": True, "annotation": "b1"}}
-        )
+        comp.set_top_dynamic_annotations({10: {"highlight": True, "annotation": "b1"}})
         refreshed = comp._apply_fresh_annotations(cached_clean)
 
         assert "_dynamic_highlight" in refreshed["plotDataTop"].columns

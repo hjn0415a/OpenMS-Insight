@@ -194,13 +194,9 @@ class MirrorPlot(BaseComponent):
 
         # Creation-mode: both sides required and disjoint
         if not self._filters_top:
-            raise ValueError(
-                "MirrorPlot requires filters_top (creation mode)"
-            )
+            raise ValueError("MirrorPlot requires filters_top (creation mode)")
         if not self._filters_bottom:
-            raise ValueError(
-                "MirrorPlot requires filters_bottom (creation mode)"
-            )
+            raise ValueError("MirrorPlot requires filters_bottom (creation mode)")
 
         overlap = set(self._filters_top.keys()) & set(self._filters_bottom.keys())
         if overlap:
@@ -492,9 +488,7 @@ class MirrorPlot(BaseComponent):
             "bottomAnnotationColumn": bot_annotation_col,
             "interactivityColumns": {
                 col: col
-                for col in (
-                    self._interactivity.values() if self._interactivity else []
-                )
+                for col in (self._interactivity.values() if self._interactivity else [])
             },
         }
 
@@ -546,7 +540,9 @@ class MirrorPlot(BaseComponent):
             "styling": styling,
             "config": self._plot_config,
         }
-        # Inject any extra user-provided keys without overwriting explicitly set ones
+        # Defensive: inject any unrecognised user **kwargs forwarded via super().__init__
+        # without overwriting explicitly set args. All current MirrorPlot kwargs are
+        # already covered above, so this loop is a no-op for normal usage.
         for key, val in self._config.items():
             if key not in args:
                 args[key] = val
@@ -647,7 +643,9 @@ class MirrorPlot(BaseComponent):
         df_bottom = vue_data.get("plotDataBottom")
         if df_top is None or df_bottom is None:
             return vue_data
-        if not isinstance(df_top, pd.DataFrame) or not isinstance(df_bottom, pd.DataFrame):
+        if not isinstance(df_top, pd.DataFrame) or not isinstance(
+            df_bottom, pd.DataFrame
+        ):
             return vue_data
 
         top_highlight_col = self._highlight_column
@@ -656,7 +654,9 @@ class MirrorPlot(BaseComponent):
         bot_annotation_col = self._annotation_column
 
         if self._top_dynamic_annotations and len(df_top) > 0:
-            df_top = self._apply_annotations_to_df(df_top, self._top_dynamic_annotations)
+            df_top = self._apply_annotations_to_df(
+                df_top, self._top_dynamic_annotations
+            )
             top_highlight_col = "_dynamic_highlight"
             top_annotation_col = "_dynamic_annotation"
         if self._bottom_dynamic_annotations and len(df_bottom) > 0:
