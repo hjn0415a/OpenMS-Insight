@@ -301,10 +301,49 @@ class MirrorPlot(BaseComponent):
         return list(self._filters_top.keys()) + list(self._filters_bottom.keys())
 
     def _get_cache_config(self) -> Dict[str, Any]:
-        raise NotImplementedError("Filled in Task 3")
+        """Configuration that affects cache validity."""
+        return {
+            "filters_top": self._filters_top,
+            "filters_bottom": self._filters_bottom,
+            "filter_defaults_top": self._filter_defaults_top,
+            "filter_defaults_bottom": self._filter_defaults_bottom,
+            "interactivity": self._interactivity,
+            "x_column": self._x_column,
+            "y_column": self._y_column,
+            "highlight_column": self._highlight_column,
+            "annotation_column": self._annotation_column,
+            "title": self._title,
+            "title_top": self._title_top,
+            "title_bottom": self._title_bottom,
+            "x_label": self._x_label,
+            "y_label": self._y_label,
+            "styling": self._styling,
+            "plot_config": self._plot_config,
+        }
 
     def _restore_cache_config(self, config: Dict[str, Any]) -> None:
-        raise NotImplementedError("Filled in Task 3")
+        """Restore component-specific configuration from cached config."""
+        self._filters_top = config.get("filters_top") or {}
+        self._filters_bottom = config.get("filters_bottom") or {}
+        self._filter_defaults_top = config.get("filter_defaults_top") or {}
+        self._filter_defaults_bottom = config.get("filter_defaults_bottom") or {}
+        self._interactivity = config.get("interactivity") or {}
+        self._x_column = config.get("x_column", "x")
+        self._y_column = config.get("y_column", "y")
+        self._highlight_column = config.get("highlight_column")
+        self._annotation_column = config.get("annotation_column")
+        self._title = config.get("title")
+        self._title_top = config.get("title_top")
+        self._title_bottom = config.get("title_bottom")
+        self._x_label = config.get("x_label", self._x_column)
+        self._y_label = config.get("y_label", self._y_column)
+        self._styling = config.get("styling") or {}
+        self._plot_config = config.get("plot_config") or {}
+        # Dynamic state (not cached) — reset to None
+        self._top_dynamic_annotations = None
+        self._bottom_dynamic_annotations = None
+        self._top_dynamic_title = None
+        self._bottom_dynamic_title = None
 
     def _prepare_vue_data(self, state: Dict[str, Any]) -> Dict[str, Any]:
         raise NotImplementedError("Filled in Task 4")
