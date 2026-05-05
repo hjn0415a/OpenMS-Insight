@@ -239,3 +239,81 @@ class TestMirrorPlotComponentArgs:
         assert "bottomColor" in args["styling"]
         assert "highlightColor" in args["styling"]
         assert "selectedColor" in args["styling"]
+
+
+class TestMirrorPlotDynamicAnnotations:
+    def _make(self, temp_cache_dir, data, **overrides):
+        defaults = {
+            "cache_id": "test_dyn",
+            "data": data,
+            "cache_path": str(temp_cache_dir),
+            "filters_top": {"spectrum_top": "scan_id"},
+            "filters_bottom": {"spectrum_bottom": "scan_id"},
+            "interactivity": {"selected_peak": "peak_id"},
+            "x_column": "mass",
+            "y_column": "intensity",
+        }
+        defaults.update(overrides)
+        return MirrorPlot(**defaults)
+
+    def test_set_top_only_affects_top(
+        self, mock_streamlit, temp_cache_dir, sample_lineplot_data
+    ):
+        comp = self._make(temp_cache_dir, sample_lineplot_data)
+        comp.set_top_dynamic_annotations(
+            {10: {"highlight": True, "annotation": "b1"}},
+            title="Top!",
+        )
+        assert comp._top_dynamic_annotations == {
+            10: {"highlight": True, "annotation": "b1"}
+        }
+        assert comp._top_dynamic_title == "Top!"
+        assert comp._bottom_dynamic_annotations is None
+        assert comp._bottom_dynamic_title is None
+
+    def test_set_bottom_only_affects_bottom(
+        self, mock_streamlit, temp_cache_dir, sample_lineplot_data
+    ):
+        comp = self._make(temp_cache_dir, sample_lineplot_data)
+        comp.set_bottom_dynamic_annotations(
+            {40: {"highlight": True, "annotation": "y3"}}, title="Bot"
+        )
+        assert comp._bottom_dynamic_annotations == {
+            40: {"highlight": True, "annotation": "y3"}
+        }
+        assert comp._bottom_dynamic_title == "Bot"
+        assert comp._top_dynamic_annotations is None
+
+    def test_clear_top_only(
+        self, mock_streamlit, temp_cache_dir, sample_lineplot_data
+    ):
+        comp = self._make(temp_cache_dir, sample_lineplot_data)
+        comp.set_top_dynamic_annotations({10: {"highlight": True, "annotation": "b1"}})
+        comp.set_bottom_dynamic_annotations({40: {"highlight": True, "annotation": "y3"}})
+        comp.clear_dynamic_annotations(side="top")
+        assert comp._top_dynamic_annotations is None
+        assert comp._top_dynamic_title is None
+        # Bottom untouched
+        assert comp._bottom_dynamic_annotations == {
+            40: {"highlight": True, "annotation": "y3"}
+        }
+
+    def test_clear_both(
+        self, mock_streamlit, temp_cache_dir, sample_lineplot_data
+    ):
+        comp = self._make(temp_cache_dir, sample_lineplot_data)
+        comp.set_top_dynamic_annotations({10: {"highlight": True, "annotation": "b1"}})
+        comp.set_bottom_dynamic_annotations({40: {"highlight": True, "annotation": "y3"}})
+        comp.clear_dynamic_annotations()  # side=None default
+        assert comp._top_dynamic_annotations is None
+        assert comp._bottom_dynamic_annotations is None
+        assert comp._top_dynamic_title is None
+        assert comp._bottom_dynamic_title is None
+
+    def test_setters_return_self_for_chaining(
+        self, mock_streamlit, temp_cache_dir, sample_lineplot_data
+    ):
+        comp = self._make(temp_cache_dir, sample_lineplot_data)
+        assert comp.set_top_dynamic_annotations({}) is comp
+        assert comp.set_bottom_dynamic_annotations({}) is comp
+        assert comp.clear_dynamic_annotations() is comp

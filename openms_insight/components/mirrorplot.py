@@ -1,7 +1,7 @@
 """Mirror plot component using Plotly.js — two spectra, one figure."""
 
 import hashlib
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 import polars as pl
 
@@ -551,6 +551,64 @@ class MirrorPlot(BaseComponent):
             if key not in args:
                 args[key] = val
         return args
+
+    def set_top_dynamic_annotations(
+        self,
+        annotations: Optional[Dict[Any, Dict[str, Any]]],
+        title: Optional[str] = None,
+    ) -> "MirrorPlot":
+        """Apply per-render annotations to the top spectrum only.
+
+        Args:
+            annotations: Dict keyed by interactivity-column value (peak_id),
+                each entry containing {'highlight': bool, 'annotation': str}.
+                Pass None to clear (or use clear_dynamic_annotations(side='top')).
+            title: Optional dynamic title — overrides title_top for this render.
+
+        Not cached. Returns self for chaining.
+        """
+        self._top_dynamic_annotations = annotations
+        self._top_dynamic_title = title
+        return self
+
+    def set_bottom_dynamic_annotations(
+        self,
+        annotations: Optional[Dict[Any, Dict[str, Any]]],
+        title: Optional[str] = None,
+    ) -> "MirrorPlot":
+        """Apply per-render annotations to the bottom spectrum only.
+
+        Args:
+            annotations: Dict keyed by interactivity-column value (peak_id),
+                each entry containing {'highlight': bool, 'annotation': str}.
+                Pass None to clear (or use clear_dynamic_annotations(side='bottom')).
+            title: Optional dynamic title — overrides title_bottom for this render.
+
+        Not cached. Returns self for chaining.
+        """
+        self._bottom_dynamic_annotations = annotations
+        self._bottom_dynamic_title = title
+        return self
+
+    def clear_dynamic_annotations(
+        self,
+        side: Optional[Literal["top", "bottom"]] = None,
+    ) -> "MirrorPlot":
+        """Clear dynamic annotations for one or both sides.
+
+        Args:
+            side: None (default) clears both halves. "top" clears only top.
+                "bottom" clears only bottom.
+
+        Returns self for chaining.
+        """
+        if side in (None, "top"):
+            self._top_dynamic_annotations = None
+            self._top_dynamic_title = None
+        if side in (None, "bottom"):
+            self._bottom_dynamic_annotations = None
+            self._bottom_dynamic_title = None
+        return self
 
 
 if TYPE_CHECKING:
