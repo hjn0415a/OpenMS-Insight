@@ -106,7 +106,7 @@ with ui_col2:
 with ui_col3:
     scale_opt = st.selectbox(
         "📊 Step 3: Data Scaling",
-        options=["mean_centering", "pareto_scaling", "range_scaling", "None"],
+        options=["mean_centering", "auto_scaling", "pareto_scaling", "range_scaling", "None"],
         index=0,
         help="Standardizes variance limits across row-wise proteins.",
     )
@@ -260,6 +260,16 @@ else:
             else:
                 st.error("❌ Offset Center")
             st.metric("Avg Row Means", f"{meta_mean:.4f}")
+        elif scale_opt == "auto_scaling":
+            row_means = df_step3.select([pl.mean_horizontal(sample_cols)]).to_series().to_numpy()
+            row_stds = df_step3.select([pl.concat_list(sample_cols).list.var().sqrt()]).to_series().to_numpy()
+            meta_mean = np.nanmean(row_means)
+            meta_std = np.nanmean(row_stds)
+            if abs(meta_mean) < 1e-5 and abs(meta_std - 1.0) < 1e-3:
+                st.success("⭕ Mean at 0 & Std Dev at 1!")
+            else:
+                st.warning("⚠️ Auto scaling bounds slightly offset (check for constants/zeros).")
+            st.metric("Avg Mean / Std Dev", f"{meta_mean:.2f} / {meta_std:.2f}")
         elif scale_opt == "None":
             st.info("Skipped")
         else:

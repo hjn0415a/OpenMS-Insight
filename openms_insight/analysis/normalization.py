@@ -205,6 +205,10 @@ def scale_data(
         scaled_lazy = lazy_metrics.with_columns([
             (pl.col(col) - pl.col("_row_mean")).alias(col) for col in sample_cols
         ])
+    elif strategy == "auto_scaling":
+        scaled_lazy = lazy_metrics.with_columns([
+            ((pl.col(col) - pl.col("_row_mean")) / pl.col("_row_std")).alias(col) for col in sample_cols
+        ])
     elif strategy == "pareto_scaling":
         scaled_lazy = lazy_metrics.with_columns([
             ((pl.col(col) - pl.col("_row_mean")) / pl.col("_row_std").sqrt()).alias(col) for col in sample_cols
